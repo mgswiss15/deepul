@@ -10,3 +10,5 @@ deepul.egg-info/
 *.out
 *.synctex.gz
 *.pdf
+**/data
+**/.ipynb_checkpoints
