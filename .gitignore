@@ -12,3 +12,4 @@ deepul.egg-info/
 *.pdf
 **/data
 **/.ipynb_checkpoints
+*.png
