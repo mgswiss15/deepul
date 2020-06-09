@@ -17,6 +17,8 @@ def is_export(cell):
 def nb2script(fname):
     "Finds cells starting with `#export` and puts them into a new module"
     fname = Path(f'{fname}.ipynb')
+    cwd = Path().absolute()
+    out_path = cwd.parents[1]/'deepul'
     fname_out = f'exp_{fname.stem.split("_")[0].lower()}.py'
     main_dic = json.load(open(fname,'r',encoding="utf-8"))
     code_cells = [c for c in main_dic['cells'] if is_export(c)]
@@ -28,7 +30,7 @@ def nb2script(fname):
 
 '''
     for cell in code_cells: module += ''.join(cell['source'][1:]) + '\n\n'
-    output_path = fname_out
+    output_path = out_path / fname_out
     with io.open(output_path, "w", encoding="utf-8") as f:
         f.write(module[:-2])
     print(f"Converted {fname} to {output_path}")
