@@ -35,6 +35,7 @@ def train(train_loader, model, optimizer, learn_rate, device):
         loss = model.loss_function(logits, batch) 
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         loss_list.append(loss.item())
     return loss_list
