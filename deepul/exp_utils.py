@@ -12,30 +12,38 @@ import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
 
-def training(train_loader, test_loader, model, optim_algo, learn_rate, device=torch.device('cpu'), epochs=20):
+def training(train_loader, test_loader, model, optim_algo, learn_rate, device=torch.device('cpu'), epochs=20, grad_clip=None):
     nll_train = []
     nll_test = []
     optimizer = optim_algo(model.parameters(), learn_rate)
     test_loss = evaluate(test_loader, model, device)
     nll_test.append(test_loss.item())
     for epoch in range(epochs):
-        loss_list = train(train_loader, model, optimizer, learn_rate, device)
+        loss_list = train(train_loader, model, optimizer, learn_rate, device, grad_clip=grad_clip)
         nll_train += loss_list
         test_loss = evaluate(test_loader, model, device)
         nll_test.append(test_loss.item())
         print(f'Epoch {epoch} loss train: {loss_list[-1]}, test: {nll_test[-1]}')
     return nll_train, nll_test
         
-def train(train_loader, model, optimizer, learn_rate, device):
+def train(train_loader, model, optimizer, learn_rate, device, grad_clip=None):
+    """For back compatibility batch can be (input) or (input, output)"""
     model.train()
     loss_list = []
     for batch in train_loader:
-        batch = batch.to(device)
+        if isinstance(batch, list):
+            x, y = batch
+            x = x.to(device)
+            y = y.to(device)
+            batch = [x, y]
+        else:
+            batch = batch.to(device)
         logits = model(batch)
         loss = model.loss_function(logits, batch) 
         optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        if grad_clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
         loss_list.append(loss.item())
     return loss_list
@@ -45,13 +53,26 @@ def evaluate(test_loader, model, device):
     with torch.no_grad():
         loss = 0
         for batch in test_loader:
-            batch = batch.to(device)
+            if isinstance(batch, list):
+                x, y = batch
+                n_inst = x.shape[0]
+                x = x.to(device)
+                y = y.to(device)
+                batch = [x, y]
+            else:
+                n_inst = batch.shape[0]
+                batch = batch.to(device)
             logits = model(batch)
-            loss += model.loss_function(logits, batch) * batch.shape[0]
+            loss += model.loss_function(logits, batch) * n_inst
         total_loss = loss / len(test_loader.dataset)
     return total_loss
         
 def get_loaders(train_data, test_data, bs):
-    train_loader = data.DataLoader(torch.as_tensor(train_data), batch_size=bs, shuffle=True)
-    test_loader = data.DataLoader(torch.as_tensor(test_data), batch_size=bs, shuffle=False)
+    """For back compatibility works with datasets and numpy arrays as inputs"""
+    if isinstance(train_data, np.ndarray):
+        train_data = torch.as_tensor(train_data)
+        test_data = torch.as_tensor(test_data)
+    assert (isinstance(train_data, data.Dataset) | isinstance(train_data, torch.Tensor)), print(f'train_data are not in good format (np.ndarray, torch.Tensor or data.Dataset)')
+    train_loader = data.DataLoader(train_data, batch_size=bs, shuffle=True)
+    test_loader = data.DataLoader(test_data, batch_size=bs, shuffle=False)
     return train_loader, test_loader
