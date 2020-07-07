@@ -99,7 +99,7 @@ def show_2d_densities(densities, dset_type, fname=None, title='Densities'):
     # mesh_xs = ptu.FloatTensor(np.stack([x, y], axis=2).reshape(-1, 2))
     # densities = np.exp(ptu.get_numpy(self.log_prob(mesh_xs)))
     plt.pcolor(x, y, densities.reshape([y.shape[0], y.shape[1]]))
-    plt.pcolor(x, y, densities.reshape([y.shape[0], y.shape[1]]))
+#     plt.pcolor(x, y, densities.reshape([y.shape[0], y.shape[1]]))
     plt.xlabel('z1')
     plt.ylabel('z2')
     if fname is not None:
