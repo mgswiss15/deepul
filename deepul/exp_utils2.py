@@ -12,26 +12,30 @@ import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
 
-def training(train_loader, test_loader, model, optim_algo, learn_rate, device=torch.device('cpu'), epochs=20, grad_clip=None):
+def training(train_loader, test_loader, model, optim_algo, learn_rate, device=torch.device('cpu'), epochs=20, grad_clip=None, warmup=200):
     nll_train = []
     nll_test = []
     optimizer = optim_algo(model.parameters(), learn_rate)
+    print('First eval')
     test_loss = evaluate(test_loader, model, device)
-    nll_test.append(test_loss.item())
+    nll_test.append(test_loss)
+    print('Training loop')
     for epoch in range(epochs):
-        loss_list = train(train_loader, model, optimizer, learn_rate, device, grad_clip=grad_clip)
+        loss_list = train(train_loader, model, optimizer, learn_rate, device, grad_clip=grad_clip, warmup=warmup)
         nll_train += loss_list
         test_loss = evaluate(test_loader, model, device)
-        nll_test.append(test_loss.item())
+        nll_test.append(test_loss)
         if epoch%10. == 0.:
             print(f'Epoch {epoch} loss train: {loss_list[-1]}, test: {nll_test[-1]}')
     return nll_train, nll_test
         
-def train(train_loader, model, optimizer, learn_rate, device, grad_clip=None):
+def train(train_loader, model, optimizer, learn_rate, device, grad_clip=None, warmup=200):
     """For back compatibility batch can be (input) or (input, output)"""
     model.train()
     loss_list = []
-    for batch in train_loader:
+    for i, batch in enumerate(train_loader):
+        lr = min(1, 1/warmup * i) * learn_rate
+        optimizer.lr = lr
         if isinstance(batch, list):
             x, y = batch
             x = x.to(device)
@@ -39,8 +43,8 @@ def train(train_loader, model, optimizer, learn_rate, device, grad_clip=None):
             batch = [x, y]
         else:
             batch = batch.to(device).requires_grad_()
-        latent, jacobian = model(batch)
-        loss = model.loss_function(latent, jacobian) 
+        latent, log_det_jacobian = model(batch)
+        loss = model.loss_function(latent, log_det_jacobian) 
         optimizer.zero_grad()
         loss.backward()
         if grad_clip:
@@ -63,9 +67,9 @@ def evaluate(test_loader, model, device):
                 batch = [x, y]
             else:
                 n_inst = batch.shape[0]
-                batch = batch.to(device).requires_grad_()
-            latent, jacobian = model(batch)
-            loss += model.loss_function(latent, jacobian) * n_inst
+                batch = batch.to(device)
+            latent, log_det_jacobian = model(batch)
+            loss += model.loss_function(latent, log_det_jacobian).item() * n_inst
     total_loss = loss / len(test_loader.dataset)
     return total_loss
         
