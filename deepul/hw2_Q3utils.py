@@ -1,7 +1,6 @@
 ''' Generated from Q3_utils.ipynb. Do not edit .py file.'''
 from deepul.exp_utils2 import *
 from torch.distributions import Normal
-import numpy as np
 
 class AffineCoupling(nn.Module):
     def __init__(self, channels, res_filters, res_blocks):
@@ -296,41 +295,3 @@ def init_actnorm(model, data_loader, device):
     with torch.no_grad():   
         batch = next(iter(data_loader)).to(device)
         model(batch)
-
-
-def q3_a(train_data, test_data):
-    """
-    train_data: A (n_train, H, W, 3) uint8 numpy array of quantized images with values in {0, 1, 2, 3}
-    test_data: A (n_test, H, W, 3) uint8 numpy array of binary images with values in {0, 1, 2, 3}
-
-    Returns
-    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
-    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
-    - a numpy array of size (100, H, W, 3) of samples with values in [0, 1]
-    - a numpy array of size (30, H, W, 3) of interpolations with values in [0, 1].
-    """
-
-    """ YOUR CODE HERE """
-    train_data = np.transpose(train_data, (0, 3, 1, 2))
-    test_data = np.transpose(test_data, (0, 3, 1, 2))
-    train_data = dequantize(train_data)
-    test_data = dequantize(test_data)
-#     train_data = dequantize(train_data[:256,:,:,:])
-#     test_data = dequantize(test_data[:256,:,:,:])
-    image_shape = train_data.shape[1:] # c, h, w
-
-    DEVICE = torch.device('cuda')
-    train_loader, test_loader = get_loaders(train_data, test_data, bs=128)
-    model = RealNVP(image_shape).to(DEVICE)
-    init_actnorm(model, train_loader, DEVICE)
-    optim_algo = torch.optim.Adam
-    nll_train, nll_test = training(
-        train_loader, test_loader,
-        model, optim_algo, learn_rate=5e-4, warmup=200, device=DEVICE, epochs=50)
-    npixels = np.array(image_shape).prod()
-    nll_train = np.array(nll_train) / npixels + np.log(4)
-    nll_test = np.array(nll_test) / npixels + np.log(4)
-    samples = model.sampling(100).cpu().numpy()
-    batch = next(iter(test_loader)).to(DEVICE)
-    interpolations = model.interpolate(batch).cpu().numpy()
-    return nll_train, nll_test, samples, interpolations
