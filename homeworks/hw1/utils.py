@@ -1,0 +1,77 @@
+"""Utility functions for hw1."""
+
+import torch
+
+
+class Learner():
+    """Class for model training."""
+
+    def __init__(self, model, optimizer, trainloader, testloader, loss_func, device):
+        self.model = model
+        self.optimizer = optimizer
+        self.trainloader = trainloader
+        self.testloader = testloader
+        self.loss_func = loss_func
+        self.device = device
+
+    def fit(self, epochs):
+        losses_train = []
+        losses_test = self.eval_epoch()
+        for epoch in range(epochs):
+            print(f"Training epoch {epoch} ...", flush=True)
+            losses = self.train_epoch()
+            losses_train.extend(losses)
+            losses = self.eval_epoch()
+            losses_test.extend(losses)
+            print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
+        return losses_train, losses_test
+
+    def train_epoch(self):
+        losses = []
+        self.model.train()
+        for batch_input, batch_target in self.trainloader:
+            batch_input, batch_target = batch_input.to(self.device), batch_target.to(self.device)
+            self.optimizer.zero_grad()
+            out = self.model(batch_input)
+            loss = self.loss_func(out, batch_target)
+            loss.backward()
+            self.optimizer.step()
+            losses.append(loss.item())
+        return losses
+
+    def eval_epoch(self):
+        losses = []
+        self.model.eval()
+        with torch.no_grad():
+            loss = 0.
+            n_samples = 0.
+            for batch_input, batch_target in self.testloader:
+                batch_input, batch_target = batch_input.to(self.device), batch_target.to(self.device)
+                out = self.model(batch_input)
+                batch_size = batch_input.shape[0]
+                loss += self.loss_func(out, batch_target).item() * batch_size
+                n_samples += batch_size
+            losses.append(loss / n_samples)
+        return losses
+
+
+def rescale(x, min, max):
+    """Rescale x to [-1, 1]."""
+
+    return 2. * (x - min) / (max - min) - 1.
+
+
+def descale(x, min, max):
+    """Descale x from [-1, 1] to [min, max]."""
+
+    return (x + 1.) * (max - min) / 2. + min
+
+
+def reload_modelstate(model, optimizer, modelpath):
+    checkpoint = torch.load(modelpath)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    losses_train, losses_test = checkpoint['losses_train'], checkpoint['losses_test']
+    print(f"Loded model from {modelpath}.")
+    return model, optimizer, losses_train, losses_test
+

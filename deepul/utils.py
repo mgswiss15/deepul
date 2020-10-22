@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torchvision.utils import make_grid
 
 
-def savefig(fname, show_figure=True):
+def savefig(fname, show_figure=False):
     if not exists(dirname(fname)):
         os.makedirs(dirname(fname))
     plt.tight_layout()
@@ -99,7 +99,7 @@ def load_pickled_data(fname, include_labels=False):
 
 
 def get_data_dir(hw_number):
-    return join('deepul', 'homeworks', f'hw{hw_number}', 'data')
+    return join(os.getenv("HOME"), 'scratch', 'homeworks', f'hw{hw_number}', 'data')
 
 
 def quantize(images, n_bits):

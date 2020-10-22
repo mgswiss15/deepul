@@ -1,4 +1,7 @@
 from .utils import *
+import os
+
+resultsdir = os.getenv("HOME") + '/scratch/homeworks/hw1/results'
 
 
 # Question 1
@@ -60,10 +63,10 @@ def q1_save_results(dset_type, part, fn):
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
 
     save_training_plot(train_losses, test_losses, f'Q1({part}) Dataset {dset_type} Train Plot',
-                       f'results/q1_{part}_dset{dset_type}_train_plot.png')
+                       f'{resultsdir}/q1_{part}_dset{dset_type}_train_plot.png')
     save_distribution_1d(train_data, distribution,
                          f'Q1({part}) Dataset {dset_type} Learned Distribution',
-                         f'results/q1_{part}_dset{dset_type}_learned_dist.png')
+                         f'{resultsdir}/q1_{part}_dset{dset_type}_learned_dist.png')
 
 
 # Question 2
@@ -171,16 +174,16 @@ def q2_save_results(dset_type, part, fn):
         print(f'Final Test Loss: {test_losses[-1]:.4f}')
 
         save_training_plot(train_losses, test_losses, f'Q2({part}) Dataset {dset_type} Train Plot)',
-                           f'results/q2_{part}_dset{dset_type}_train_plot.png')
+                           f'{resultsdir}/q2_{part}_dset{dset_type}_train_plot.png')
         save_distribution_2d(true_dist, distribution,
-                             f'results/q2_{part}_dset{dset_type}_learned_dist.png')
+                             f'{resultsdir}/q2_{part}_dset{dset_type}_learned_dist.png')
     elif part == 'b':
         train_losses, test_losses, samples = fn(train_data, test_data, img_shape, dset_type)
         samples = samples.astype('float32') * 255
         print(f'Final Test Loss: {test_losses[-1]:.4f}')
         save_training_plot(train_losses, test_losses, f'Q2({part}) Dataset {dset_type} Train Plot',
-                           f'results/q2_{part}_dset{dset_type}_train_plot.png')
-        show_samples(samples, f'results/q2_{part}_dset{dset_type}_samples.png')
+                           f'{resultsdir}/q2_{part}_dset{dset_type}_train_plot.png')
+        show_samples(samples, f'{resultsdir}/q2_{part}_dset{dset_type}_samples.png')
 
 
 # Question 3
@@ -200,8 +203,8 @@ def q3a_save_results(dset_type, q3_a):
 
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q3(a) Dataset {dset_type} Train Plot',
-                       f'results/q3_a_dset{dset_type}_train_plot.png')
-    show_samples(samples, f'results/q3_a_dset{dset_type}_samples.png')
+                       f'{resultsdir}/q3_a_dset{dset_type}_train_plot.png')
+    show_samples(samples, f'{resultsdir}/q3_a_dset{dset_type}_samples.png')
 
 
 def q3bc_save_results(dset_type, part, fn):
@@ -220,8 +223,8 @@ def q3bc_save_results(dset_type, part, fn):
 
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q3({part}) Dataset {dset_type} Train Plot',
-                       f'results/q3_{part}_dset{dset_type}_train_plot.png')
-    show_samples(samples, f'results/q3_{part}_dset{dset_type}_samples.png')
+                       f'{resultsdir}/q3_{part}_dset{dset_type}_train_plot.png')
+    show_samples(samples, f'{resultsdir}/q3_{part}_dset{dset_type}_samples.png')
 
 
 def visualize_q3b_data(dset_type):
@@ -258,8 +261,8 @@ def q3d_save_results(dset_type, q3_d):
 
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q3(d) Dataset {dset_type} Train Plot',
-                       f'results/q3_d_dset{dset_type}_train_plot.png')
-    show_samples(samples, f'results/q3_d_dset{dset_type}_samples.png')
+                       f'{resultsdir}/q3_d_dset{dset_type}_train_plot.png')
+    show_samples(samples, f'{resultsdir}/q3_d_dset{dset_type}_samples.png')
 
 
 # Question 4
@@ -271,8 +274,8 @@ def q4a_save_results(q4_a):
     samples = samples.astype('float32') / 3 * 255
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q4(a) Train Plot',
-                       f'results/q4_a_train_plot.png')
-    show_samples(samples, f'results/q4_a_samples.png')
+                       f'{resultsdir}/q4_a_train_plot.png')
+    show_samples(samples, f'{resultsdir}/q4_a_samples.png')
 
 
 def q4b_save_results(q4_b):
@@ -288,8 +291,8 @@ def q4b_save_results(q4_b):
 
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q4(b) Train Plot',
-                       f'results/q4_b_train_plot.png')
-    show_samples(samples, f'results/q4_b_samples.png')
+                       f'{resultsdir}/q4_b_train_plot.png')
+    show_samples(samples, f'{resultsdir}/q4_b_samples.png')
 
 
 def q4c_save_results(q4_c):
@@ -305,5 +308,5 @@ def q4c_save_results(q4_c):
     samples = samples.astype('float32') * 255
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q4(c) Train Plot',
-                       f'results/q4_c_train_plot.png')
-    show_samples(samples, f'results/q4_c_samples.png')
+                       f'{resultsdir}/q4_c_train_plot.png')
+    show_samples(samples, f'{resultsdir}/q4_c_samples.png')
