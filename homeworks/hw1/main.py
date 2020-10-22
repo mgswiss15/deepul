@@ -2,6 +2,7 @@ from deepul.hw1_helper import *
 import argparse
 import sys
 import homeworks.hw1.hw1_solved as hw1
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 
@@ -33,8 +34,9 @@ hw1.SHORTTRAINING = True if args.short else False
 
 origout = sys.stdout
 origerr = sys.stderr
-sys.stdout = open(f'{resultsdir}/{args.ex}_{args.ds}.out', 'w')
-sys.err = open(f'{resultsdir}/{args.ex}_{args.ds}.out', 'a')
+Path(f'{resultsdir}/{args.ex}_{args.ds}.out').touch(exist_ok=True)
+logfile = open(f'{resultsdir}/{args.ex}_{args.ds}.out', 'w')
+sys.stdout = sys.err = logfile
 
 if args.ex == "q1a":
     q1_save_results(args.ds, 'a', hw1.q1_a)
