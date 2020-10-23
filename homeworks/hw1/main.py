@@ -34,8 +34,9 @@ hw1.SHORTTRAINING = True if args.short else False
 
 origout = sys.stdout
 origerr = sys.stderr
-Path(f'{resultsdir}/{args.ex}_{args.ds}.out').touch(exist_ok=True)
-logfile = open(f'{resultsdir}/{args.ex}_{args.ds}.out', 'w')
+logpath = f'{resultsdir}/{args.ex}_{args.ds}.log'
+Path(logpath).parent.mkdir(parents=True, exist_ok=True)
+logfile = open(logpath, 'w')
 sys.stdout = sys.err = logfile
 
 if args.ex == "q1a":

@@ -516,3 +516,99 @@ def q3_c(train_data, test_data, image_shape, dset_id):
     samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy()
+
+
+def q3_d(train_data, train_labels, test_data, test_labels, image_shape, n_classes, dset_id):
+    """
+    train_data: A (n_train, H, W, 1) numpy array of binary images with values in {0, 1}
+    train_labels: A (n_train,) numpy array of class labels
+    test_data: A (n_test, H, W, 1) numpy array of binary images with values in {0, 1}
+    test_labels: A (n_test,) numpy array of class labels
+    image_shape: (H, W), height and width
+    n_classes: number of classes (4 or 10)
+    dset_id: An identifying number of which dataset is given (1 or 2). Most likely
+           used to set different hyperparameters for different datasets
+
+    Returns
+    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
+    - a numpy array of size (100, H, C, 1) of samples with values in {0, 1}
+    where an even number of images of each class are sampled with 100 total
+    """
+
+    """ YOUR CODE HERE """
+
+    # DEVICE is defined and assigned to this module in main
+    print(f"Training q3_d {dset_id} on {DEVICE}.")
+
+    MAX_EPOCHS = 10
+    if SHORTTRAINING:
+        MAX_EPOCHS = 1
+    LEARN_RATE = 1e-3
+    BATCH_SIZE = 128
+
+    train_targets = torch.from_numpy(train_data).float()
+    test_targets = torch.from_numpy(test_data).float()
+    train_targets = train_targets.permute(0, 3, 1, 2)
+    test_targets = test_targets.permute(0, 3, 1, 2)
+    train_data = rescale(train_targets, 0., COLCATS - 1.)
+    test_data = rescale(test_targets, 0., COLCATS - 1.)
+
+    c, h, w = train_data.shape[1:]
+    n_dims = c * h * w
+
+    def loss_func(logits, targets):
+        """Binary cross etnropy."""
+        loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        return loss.sum(dim=(1, 2, 3)).mean(dim=0)
+
+    model = nn_.PixelCNN(in_channels=1, n_filters=64, kernel_size=7, n_layers=5).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_data, train_targets),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data, test_targets),
+                                batch_size=BATCH_SIZE)
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        Path(modelpath).parent.mkdir(parents=True, exist_ok=True)
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
+
+    # def sample_data(n_samples):
+    #     train_size = train_targets.shape[0]
+    #     freqs = (train_targets.sum(dim=0) / train_size).expand(n_samples, -1, -1, -1)
+    #     samples = torch.bernoulli(freqs)
+    #     samples = samples.to(DEVICE)
+    #     for ci in range(c):
+    #         for hi in range(h):
+    #             for wi in range(w):
+    #                 logits = model(samples)
+    #                 samples[:, ci, hi, wi] = torch.bernoulli(torch.sigmoid(logits))[:, ci, hi, wi]
+    #     return samples.permute(0, 2, 3, 1)
+
+    model.eval()
+    with torch.no_grad():
+        samples = sample_data(100).to("cpu")
+
+    return np.array(losses_train), np.array(losses_test), samples.numpy()

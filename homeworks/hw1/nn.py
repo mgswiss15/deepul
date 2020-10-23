@@ -281,3 +281,41 @@ class PixelCNNResidual(nn.Module):
                             samples[:, ci, hi, wi] = rescale(samples_flat, 0., self.colcats - 1.)
                     print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
+
+
+class PixelCNNConditional(nn.Module):
+    """PixelCNN model for single color masked convolutions."""
+
+    def __init__(self, in_channels, n_filters, kernel_size, n_layers):
+        super().__init__()
+        layers = [MaskedConv2dASingle(in_channels, n_filters, kernel_size)]
+        for _ in range(n_layers):
+            layers.append(nn.ReLU())
+            layers.append(MaskedConv2dBSingle(n_filters, n_filters, kernel_size))
+        layers.append(nn.ReLU())
+        layers.append(MaskedConv2dBSingle(n_filters, n_filters, 1))
+        layers.append(nn.ReLU())
+        layers.append(MaskedConv2dBSingle(n_filters, n_filters, 1))
+        layers.append(nn.ReLU())
+        layers.append(MaskedConv2dBSingle(n_filters, in_channels, 1))
+        self.sequential = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.sequential(x)
+
+    def sample_data(self, n_samples, image_shape, device, freqs):
+        self.eval()
+        with torch.no_grad():
+            h, w, c = image_shape
+            samples = samples = torch.bernoulli(freqs)
+            samples = rescale(samples, 0., 1.)
+            print(f"Sampling new examples ...", flush=True)
+            print(f"Rows: ", end="", flush=True)
+            for hi in range(h):
+                print(f"{hi}", end=" ", flush=True)
+                for wi in range(w):
+                    logits = self(samples)[:, 0, hi, wi].squeeze()
+                    probs = torch.sigmoid(logits)
+                    samples[:, 0, hi, wi] = rescale(torch.bernoulli(probs), 0., 1.)
+            print(f"", flush=True)  # print newline symbol after all rows
+        return descale(samples.permute(0, 2, 3, 1), 0., 1.)

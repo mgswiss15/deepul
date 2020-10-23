@@ -1,7 +1,6 @@
 from .utils import *
-import os
 
-resultsdir = os.getenv("HOME") + '/scratch/homeworks/hw1/results'
+resultsdir = '../hw1/results'
 
 
 # Question 1
