@@ -77,8 +77,9 @@ def reload_modelstate(model, optimizer, modelpath):
     print(f"Loded model from {modelpath}.")
     return model, optimizer, losses_train, losses_test
 
-def prep_data(data, colcats):
-    targets = torch.from_numpy(data).float()
+
+def prep_data(data, colcats, dtype=torch.float):
+    targets = torch.from_numpy(data).to(dtype)
     targets = targets.permute(0, 3, 1, 2)
     data = rescale(targets, 0., colcats - 1.)
     return targets, data

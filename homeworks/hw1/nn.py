@@ -121,6 +121,7 @@ class PixelCNN(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
+        # batches are lists of data, labels in conditional models so take just data
         logits = x[0] if isinstance(x, list) else x
         for layer in self.layers:
             if isinstance(layer, MaskedConv2dSingle) and self.n_classes > 0:
@@ -147,10 +148,12 @@ class PixelCNN(nn.Module):
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
 
 
-class MaskedConv2dB(nn.Conv2d):
-    """Masked 2D convolution type B as defined in PixelCNN paper."""
+class MaskedConv2d(nn.Conv2d):
+    """Masked 2D convolution as defined in PixelCNN paper."""
 
-    def __init__(self, in_channels, out_channels, kernel_size, bias=True, indepchannels=False):
+    def __init__(self, masktype, in_channels, out_channels, kernel_size, bias=True, indepchannels=False):
+        if masktype not in ['A', 'B']:
+            raise Exception(f"Mask type has to be A or B, not {masktype}.")
         padding = kernel_size // 2
         super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
         if (self.kernel_size[0] % 2) == 0:
@@ -168,44 +171,17 @@ class MaskedConv2dB(nn.Conv2d):
             raise Exception(f"Invalid out_channels {out_channels}, has to be divisible by 3.")
         greenin = 2 * redin
         greenout = 2 * redout
-        if indepchannels:
+        if masktype == 'B' and indepchannels:
             mask[:redin, :redout, mid, mid] = 1.
             mask[redin:greenin, redout:greenout, mid, mid] = 1.
             mask[greenin:, greenout:, mid, mid] = 1.
-        else:
+        elif masktype == 'B':
             mask[:redin, :, mid, mid] = 1.
             mask[redin:greenin, redout:, mid, mid] = 1.
             mask[greenin:, greenout:, mid, mid] = 1.
-        self.mask = nn.Parameter(mask, requires_grad=False)
-
-    def forward(self, input):
-        return self._conv_forward(input, self.weight * self.mask)
-
-
-class MaskedConv2dA(nn.Conv2d):
-    """Masked 2D convolution type A as defined in PixelCNN paper."""
-
-    def __init__(self, in_channels, out_channels, kernel_size, bias=True, indepchannels=False):
-        padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
-        if (self.kernel_size[0] % 2) == 0:
-            raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
-        else:
-            mid = self.kernel_size[0] // 2
-        mask = torch.zeros_like(self.weight)
-        mask[:, :, :mid, :] = 1.
-        mask[:, :, mid, :mid] = 1.
-        if not indepchannels:
-            redin = in_channels // 3
-            redout = out_channels // 3
-            if (redin != in_channels / 3):
-                raise Exception(f"Invalid in_channels {in_channels}, has to be divisible by 3.")
-            if (redout != out_channels / 3):
-                raise Exception(f"Invalid out_channels {out_channels}, has to be divisible by 3.")
-            greenin = 2 * redin
-            greenout = 2 * redout
+        elif masktype == 'A' and not indepchannels:
             mask[:redin, redout:, mid, mid] = 1.
-            mask[redin:greenin, greenout:, mid, mid] = 1.
+            mask[redin:greenin, greenout:, mid, mid] = 1.            
         self.mask = nn.Parameter(mask, requires_grad=False)
 
     def forward(self, input):
@@ -218,9 +194,9 @@ class ResBlock(nn.Module):
     def __init__(self, in_channels, kernel_size, indepchannels=False):
         super().__init__()
         mid_channels = in_channels // 2
-        self.conv1 = MaskedConv2dB(in_channels, mid_channels, 1, indepchannels=indepchannels)
-        self.conv2 = MaskedConv2dB(mid_channels, mid_channels, kernel_size, indepchannels=indepchannels)
-        self.conv3 = MaskedConv2dB(mid_channels, in_channels, 1, indepchannels=indepchannels)
+        self.conv1 = MaskedConv2d('B', in_channels, mid_channels, 1, indepchannels=indepchannels)
+        self.conv2 = MaskedConv2d('B', mid_channels, mid_channels, kernel_size, indepchannels=indepchannels)
+        self.conv3 = MaskedConv2d('B', mid_channels, in_channels, 1, indepchannels=indepchannels)
 
     def forward(self, x):
         y = self.conv1(F.relu(x))
@@ -251,21 +227,22 @@ class PixelCNNResidual(nn.Module):
         self.colcats = colcats
         self.indepchannels = indepchannels
         layers = []
-        layers = [MaskedConv2dA(in_channels, n_filters, kernel_size, indepchannels=indepchannels)]
+        layers = [MaskedConv2d('A', in_channels, n_filters, kernel_size, indepchannels=indepchannels)]
         for _ in range(n_resblocks):
             layers.append(LayerNorm(n_filters // 3))
             layers.append(ResBlock(n_filters, kernel_size, indepchannels=indepchannels))
         for _ in range(2):
             layers.append(LayerNorm(n_filters // 3))
             layers.append(nn.ReLU())
-            layers.append(MaskedConv2dB(n_filters, n_filters, 1, indepchannels=indepchannels))
+            layers.append(MaskedConv2d('B', n_filters, n_filters, 1, indepchannels=indepchannels))
         layers.append(LayerNorm(n_filters // 3))
         layers.append(nn.ReLU())
-        layers.append(MaskedConv2dB(n_filters, in_channels*colcats, 1, indepchannels=indepchannels))
+        layers.append(MaskedConv2d('B', n_filters, in_channels*colcats, 1, indepchannels=indepchannels))
         self.sequential = nn.Sequential(*layers)
 
     def forward(self, x):
-        x = rescale(x, 0., self.colcats - 1.)
+        # batches are lists of data, labels in conditional models so take just data
+        x = x[0] if isinstance(x, list) else x
         return self.sequential(x)
 
     def sample_data(self, n_samples, image_shape, device):
@@ -274,7 +251,8 @@ class PixelCNNResidual(nn.Module):
             h, w, c = image_shape
             samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
                                         n_samples*c*h*w, replacement=True)
-            samples = samples.reshape(n_samples, c, h, w).to(device, dtype=torch.float)
+            samples = samples.reshape(n_samples, c, h, w)
+            samples = rescale(samples, 0., self.colcats - 1.).to(device)
             if self.indepchannels:
                 print(f"Sampling new examples with independent channels ...", flush=True)
                 print(f"Rows: ", end="", flush=True)
@@ -285,7 +263,8 @@ class PixelCNNResidual(nn.Module):
                         logits = logits.view(n_samples, self.colcats, c)
                         probs = logits.softmax(dim=1)
                         for ci in range(c):
-                            samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
+                            samples[:, ci, hi, wi] = torch.multinomial(probs[..., ci], 1).squeeze()
+                        samples[:, :, hi, wi] = rescale(samples[:, :, hi, wi], 0., self.colcats - 1.)
                 print(f"", flush=True)  # print newline symbol after all rows
             else:
                 print(f"Sampling new examples with dependent channels ...", flush=True)

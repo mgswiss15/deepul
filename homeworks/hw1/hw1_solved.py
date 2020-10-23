@@ -353,18 +353,14 @@ def q3_b(train_data, test_data, image_shape, dset_id):
 
     COLCATS = 4
 
-    train_targets = torch.from_numpy(train_data).long()
-    test_targets = torch.from_numpy(test_data).long()
-    train_targets = train_targets.permute(0, 3, 1, 2)
-    test_targets = test_targets.permute(0, 3, 1, 2)
-    train_data = train_targets.float()
-    test_data = test_targets.float()
+    train_targets, train_data = prep_data(train_data, COLCATS, torch.int64)
+    test_targets, test_data = prep_data(test_data, COLCATS, torch.int64)
 
-    c, h, w = train_data.shape[1:]
+    h, w, c = image_shape
     n_dims = c * h * w
 
     def loss_func(logits, targets):
-        """Cross etnropy."""
+        """Cross entropy."""
         logits = logits.view(-1, COLCATS, c, h, w)
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
@@ -388,6 +384,7 @@ def q3_b(train_data, test_data, image_shape, dset_id):
         losses_train.extend(l_train)
         losses_test.extend(l_test)
 
+        Path(modelpath).parent.mkdir(parents=True, exist_ok=True)
         torch.save({'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'losses_train': losses_train,
@@ -426,20 +423,14 @@ def q3_c(train_data, test_data, image_shape, dset_id):
 
     COLCATS = 4
 
-    train_targets = torch.from_numpy(train_data).long()
-    test_targets = torch.from_numpy(test_data).long()
-    train_targets = train_targets.permute(0, 3, 1, 2)
-    test_targets = test_targets.permute(0, 3, 1, 2)
-    # train_data = train_targets.float()
-    # test_data = test_targets.float()
-    train_data = rescale(train_targets, 0., COLCATS - 1.)
-    test_data = rescale(test_targets, 0., COLCATS - 1.)
+    train_targets, train_data = prep_data(train_data, COLCATS, torch.int64)
+    test_targets, test_data = prep_data(test_data, COLCATS, torch.int64)
 
-    c, h, w = train_data.shape[1:]
+    h, w, c = image_shape
     n_dims = c * h * w
 
     def loss_func(logits, targets):
-        """Cross etnropy."""
+        """Cross entropy."""
         logits = logits.view(-1, COLCATS, c, h, w)
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
