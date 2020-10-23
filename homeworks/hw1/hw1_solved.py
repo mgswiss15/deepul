@@ -504,26 +504,23 @@ def q3_d(train_data, train_labels, test_data, test_labels, image_shape, n_classe
 
     modelpath = f'{resultsdir}/q3_d_dset{dset_id}_model.pickle'
 
-    train_targets = torch.from_numpy(train_data).float()
-    test_targets = torch.from_numpy(test_data).float()
-    train_targets = train_targets.permute(0, 3, 1, 2)
-    test_targets = test_targets.permute(0, 3, 1, 2)
-    train_data = rescale(train_targets, 0., 1.)
-    test_data = rescale(test_targets, 0., 1.)
-    train_labels = torch.from_numpy(train_labels)
-    test_labels = torch.from_numpy(test_labels)
-    train_labels = F.one_hot(train_labels, n_classes)
-    test_labels = F.one_hot(test_labels, n_classes)
+    COLCATS = 2
 
-    c, h, w = train_data.shape[1:]
-    n_dims = c * h * w
+    train_targets, train_data = prep_data(train_data, COLCATS)
+    test_targets, test_data = prep_data(test_data, COLCATS)
+    train_labels = F.one_hot(torch.from_numpy(train_labels), n_classes).float()
+    test_labels = F.one_hot(torch.from_numpy(test_labels), n_classes).float()
+
+    h, w = image_shape
+    n_dims = h * w
 
     def loss_func(logits, targets):
         """Binary cross etnropy."""
         loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
-    model = nn_.PixelCNN(in_channels=1, n_filters=64, kernel_size=7, n_layers=5).to(DEVICE)
+    model = nn_.PixelCNN(in_channels=1, n_filters=64, kernel_size=7, n_layers=5,
+                         colcats=COLCATS, n_classes=n_classes).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():
@@ -541,7 +538,6 @@ def q3_d(train_data, train_labels, test_data, test_labels, image_shape, n_classe
         losses_train.extend(l_train)
         losses_test.extend(l_test)
 
-        Path(modelpath).parent.mkdir(parents=True, exist_ok=True)
         torch.save({'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'losses_train': losses_train,
@@ -555,21 +551,5 @@ def q3_d(train_data, train_labels, test_data, test_labels, image_shape, n_classe
     losses_test = [x / n_dims for x in losses_test]
 
     samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
-
-    # def sample_data(n_samples):
-    #     train_size = train_targets.shape[0]
-    #     freqs = (train_targets.sum(dim=0) / train_size).expand(n_samples, -1, -1, -1)
-    #     samples = torch.bernoulli(freqs)
-    #     samples = samples.to(DEVICE)
-    #     for ci in range(c):
-    #         for hi in range(h):
-    #             for wi in range(w):
-    #                 logits = model(samples)
-    #                 samples[:, ci, hi, wi] = torch.bernoulli(torch.sigmoid(logits))[:, ci, hi, wi]
-    #     return samples.permute(0, 2, 3, 1)
-
-    model.eval()
-    with torch.no_grad():
-        samples = sample_data(100).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy()

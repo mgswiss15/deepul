@@ -89,16 +89,16 @@ class MaskedConv2dSingle(nn.Conv2d):
             mask[:, :, mid, mid] = 1.
         self.mask = nn.Parameter(mask, requires_grad=False)
         if n_classes > 0:
-            self.condbias = nn.Parameter(torch.Tenosr(out_channels, n_classes))
+            self.condbias = nn.Parameter(torch.Tensor(out_channels, n_classes))
             nn.init.kaiming_uniform_(self.condbias)
 
     def forward(self, input):
-        x = input[0] if isinstance(input, list) else input
-        x = self._conv_forward(x, self.weight * self.mask)
+        data = input[0] if isinstance(input, list) else input
+        conv = self._conv_forward(data, self.weight * self.mask)
         if self.n_classes > 0:
             cond = F.linear(input[1], self.condbias, bias=None)
-            return x + cond[:, :, None, None]
-        return x
+            return conv + cond[:, :, None, None]
+        return conv
 
 
 class PixelCNN(nn.Module):
@@ -118,10 +118,16 @@ class PixelCNN(nn.Module):
         layers.append(MaskedConv2dSingle('B', n_filters, n_filters, 1, n_classes))
         layers.append(nn.ReLU())
         layers.append(MaskedConv2dSingle('B', n_filters, in_channels, 1, n_classes))
-        self.sequential = nn.Sequential(*layers)
+        self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
-        return self.sequential(x)
+        logits = x[0] if isinstance(x, list) else x
+        for layer in self.layers:
+            if isinstance(layer, MaskedConv2dSingle) and self.n_classes > 0:
+                logits = layer([logits, x[1]])
+            else:
+                logits = layer(logits)
+        return logits
 
     def sample_data(self, n_samples, image_shape, device):
         self.eval()
@@ -129,9 +135,13 @@ class PixelCNN(nn.Module):
             h, w = image_shape
             samples = torch.bernoulli(torch.ones(n_samples, 1, h, w))
             samples = rescale(samples, 0., self.colcats - 1.).to(device)
+            if self.n_classes > 0:
+                labels = torch.arange(self.n_classes).repeat_interleave(n_samples // self.n_classes)
+                labels = F.one_hot(labels, self.n_classes).to(device, dtype=torch.float)
             for hi in range(h):
                 for wi in range(w):
-                    logits = self(samples)
+                    data = [samples, labels] if self.n_classes > 0 else samples
+                    logits = self(data)
                     samples[:, 0, hi, wi] = torch.bernoulli(torch.sigmoid(logits))[:, 0, hi, wi]
                     samples[:, 0, hi, wi] = rescale(samples[:, 0, hi, wi], 0., self.colcats - 1.)
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
