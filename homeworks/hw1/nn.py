@@ -72,57 +72,69 @@ class Made(nn.Module):
         return self.sequential(x) + self.inout(x)
 
 
-class MaskedConv2dBSingle(nn.Conv2d):
+class MaskedConv2dSingle(nn.Conv2d):
     """Masked 2D convolution type B for single color channel as defined in PixelCNN paper."""
 
-    def __init__(self, in_channels, out_channels, kernel_size, bias=True):
+    def __init__(self, masktype, in_channels, out_channels, kernel_size, n_classes=0):
+        if masktype not in ['A', 'B']:
+            raise Exception(f"Mask type has to be A or B, not {masktype}.")
+        self.n_classes = n_classes
         padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
-        mid = self.kernel_size[0] // 2
-        mask = torch.zeros_like(self.weight)
-        mask[:, :, :mid, :] = 1.
-        mask[:, :, mid, :mid+1] = 1.
-        self.mask = nn.Parameter(mask, requires_grad=False)
-
-    def forward(self, input):
-        return self._conv_forward(input, self.weight * self.mask)
-
-
-class MaskedConv2dASingle(nn.Conv2d):
-    """Masked 2D convolution type A for single colour channel as defined in PixelCNN paper."""
-
-    def __init__(self, in_channels, out_channels, kernel_size, bias=True):
-        padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
+        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=True)
         mid = self.kernel_size[0] // 2
         mask = torch.zeros_like(self.weight)
         mask[:, :, :mid, :] = 1.
         mask[:, :, mid, :mid] = 1.
+        if masktype == 'B':
+            mask[:, :, mid, mid] = 1.
         self.mask = nn.Parameter(mask, requires_grad=False)
+        if n_classes > 0:
+            self.condbias = nn.Parameter(torch.Tenosr(out_channels, n_classes))
+            nn.init.kaiming_uniform_(self.condbias)
 
     def forward(self, input):
-        return self._conv_forward(input, self.weight * self.mask)
+        x = input[0] if isinstance(input, list) else input
+        x = self._conv_forward(x, self.weight * self.mask)
+        if self.n_classes > 0:
+            cond = F.linear(input[1], self.condbias, bias=None)
+            return x + cond[:, :, None, None]
+        return x
 
 
 class PixelCNN(nn.Module):
     """PixelCNN model for single color masked convolutions."""
 
-    def __init__(self, in_channels, n_filters, kernel_size, n_layers):
+    def __init__(self, in_channels, n_filters, kernel_size, n_layers, colcats=2, n_classes=0):
         super().__init__()
-        layers = [MaskedConv2dASingle(in_channels, n_filters, kernel_size)]
+        self.colcats = colcats
+        self.n_classes = n_classes
+        layers = [MaskedConv2dSingle('A', in_channels, n_filters, kernel_size, n_classes)]
         for _ in range(n_layers):
             layers.append(nn.ReLU())
-            layers.append(MaskedConv2dBSingle(n_filters, n_filters, kernel_size))
+            layers.append(MaskedConv2dSingle('B', n_filters, n_filters, kernel_size, n_classes))
         layers.append(nn.ReLU())
-        layers.append(MaskedConv2dBSingle(n_filters, n_filters, 1))
+        layers.append(MaskedConv2dSingle('B', n_filters, n_filters, 1, n_classes))
         layers.append(nn.ReLU())
-        layers.append(MaskedConv2dBSingle(n_filters, n_filters, 1))
+        layers.append(MaskedConv2dSingle('B', n_filters, n_filters, 1, n_classes))
         layers.append(nn.ReLU())
-        layers.append(MaskedConv2dBSingle(n_filters, in_channels, 1))
+        layers.append(MaskedConv2dSingle('B', n_filters, in_channels, 1, n_classes))
         self.sequential = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.sequential(x)
+
+    def sample_data(self, n_samples, image_shape, device):
+        self.eval()
+        with torch.no_grad():
+            h, w = image_shape
+            samples = torch.bernoulli(torch.ones(n_samples, 1, h, w))
+            samples = rescale(samples, 0., self.colcats - 1.).to(device)
+            for hi in range(h):
+                for wi in range(w):
+                    logits = self(samples)
+                    samples[:, 0, hi, wi] = torch.bernoulli(torch.sigmoid(logits))[:, 0, hi, wi]
+                    samples[:, 0, hi, wi] = rescale(samples[:, 0, hi, wi], 0., self.colcats - 1.)
+        return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
 
 
 class MaskedConv2dB(nn.Conv2d):
@@ -243,6 +255,7 @@ class PixelCNNResidual(nn.Module):
         self.sequential = nn.Sequential(*layers)
 
     def forward(self, x):
+        x = rescale(x, 0., self.colcats - 1.)
         return self.sequential(x)
 
     def sample_data(self, n_samples, image_shape, device):
@@ -252,7 +265,6 @@ class PixelCNNResidual(nn.Module):
             samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
                                         n_samples*c*h*w, replacement=True)
             samples = samples.reshape(n_samples, c, h, w).to(device, dtype=torch.float)
-            samples = rescale(samples, 0., self.colcats - 1.)
             if self.indepchannels:
                 print(f"Sampling new examples with independent channels ...", flush=True)
                 print(f"Rows: ", end="", flush=True)
@@ -260,11 +272,10 @@ class PixelCNNResidual(nn.Module):
                     print(f"{hi}", end=" ", flush=True)
                     for wi in range(w):
                         logits = self(samples)[:, :, hi, wi].squeeze()
-                        logits = logits.view(n_samples, self.colcats, c).permute(0, 2, 1)
-                        logits = logits.reshape(n_samples * c, self.colcats)
+                        logits = logits.view(n_samples, self.colcats, c)
                         probs = logits.softmax(dim=1)
-                        samples_flat = torch.multinomial(probs, 1).squeeze()
-                        samples[:, :, hi, wi] = rescale(samples_flat.view(n_samples, c), 0., self.colcats - 1.)
+                        for ci in range(c):
+                            samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
                 print(f"", flush=True)  # print newline symbol after all rows
             else:
                 print(f"Sampling new examples with dependent channels ...", flush=True)
@@ -281,41 +292,3 @@ class PixelCNNResidual(nn.Module):
                             samples[:, ci, hi, wi] = rescale(samples_flat, 0., self.colcats - 1.)
                     print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
-
-
-class PixelCNNConditional(nn.Module):
-    """PixelCNN model for single color masked convolutions."""
-
-    def __init__(self, in_channels, n_filters, kernel_size, n_layers):
-        super().__init__()
-        layers = [MaskedConv2dASingle(in_channels, n_filters, kernel_size)]
-        for _ in range(n_layers):
-            layers.append(nn.ReLU())
-            layers.append(MaskedConv2dBSingle(n_filters, n_filters, kernel_size))
-        layers.append(nn.ReLU())
-        layers.append(MaskedConv2dBSingle(n_filters, n_filters, 1))
-        layers.append(nn.ReLU())
-        layers.append(MaskedConv2dBSingle(n_filters, n_filters, 1))
-        layers.append(nn.ReLU())
-        layers.append(MaskedConv2dBSingle(n_filters, in_channels, 1))
-        self.sequential = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.sequential(x)
-
-    def sample_data(self, n_samples, image_shape, device, freqs):
-        self.eval()
-        with torch.no_grad():
-            h, w, c = image_shape
-            samples = samples = torch.bernoulli(freqs)
-            samples = rescale(samples, 0., 1.)
-            print(f"Sampling new examples ...", flush=True)
-            print(f"Rows: ", end="", flush=True)
-            for hi in range(h):
-                print(f"{hi}", end=" ", flush=True)
-                for wi in range(w):
-                    logits = self(samples)[:, 0, hi, wi].squeeze()
-                    probs = torch.sigmoid(logits)
-                    samples[:, 0, hi, wi] = rescale(torch.bernoulli(probs), 0., 1.)
-            print(f"", flush=True)  # print newline symbol after all rows
-        return descale(samples.permute(0, 2, 3, 1), 0., 1.)

@@ -29,11 +29,11 @@ class Learner():
     def train_epoch(self):
         losses = []
         self.model.train()
-        for batch_input, batch_target in self.trainloader:
-            batch_input, batch_target = batch_input.to(self.device), batch_target.to(self.device)
+        for batch in self.trainloader:
             self.optimizer.zero_grad()
-            out = self.model(batch_input)
-            loss = self.loss_func(out, batch_target)
+            batch = [bpart.to(self.device) for bpart in batch]
+            out = self.model(batch[:-1])
+            loss = self.loss_func(out, batch[-1])
             loss.backward()
             self.optimizer.step()
             losses.append(loss.item())
@@ -45,11 +45,11 @@ class Learner():
         with torch.no_grad():
             loss = 0.
             n_samples = 0.
-            for batch_input, batch_target in self.testloader:
-                batch_input, batch_target = batch_input.to(self.device), batch_target.to(self.device)
-                out = self.model(batch_input)
-                batch_size = batch_input.shape[0]
-                loss += self.loss_func(out, batch_target).item() * batch_size
+            for batch in self.testloader:
+                batch = [bpart.to(self.device) for bpart in batch]
+                out = self.model(batch[:-1])
+                batch_size = batch[0].shape[0]
+                loss += self.loss_func(out, batch[-1]).item() * batch_size
                 n_samples += batch_size
             losses.append(loss / n_samples)
         return losses
@@ -68,6 +68,8 @@ def descale(x, min, max):
 
 
 def reload_modelstate(model, optimizer, modelpath):
+    """Reload mode state from checkpoint saved in modelpath."""
+
     checkpoint = torch.load(modelpath)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -75,3 +77,8 @@ def reload_modelstate(model, optimizer, modelpath):
     print(f"Loded model from {modelpath}.")
     return model, optimizer, losses_train, losses_test
 
+def prep_data(data, colcats):
+    targets = torch.from_numpy(data).float()
+    targets = targets.permute(0, 3, 1, 2)
+    data = rescale(targets, 0., colcats - 1.)
+    return targets, data
