@@ -270,25 +270,16 @@ class PixelCNNResidual(nn.Module):
             else:
                 print(f"Sampling new examples with dependent channels ...", flush=True)
                 print(f"Rows: ", end="", flush=True)
-                for ci in range(c):
-                    for hi in range(h):
-                        print(f"{hi}", end=" ", flush=True)
-                        for wi in range(w):
+                for hi in range(h):
+                    print(f"{hi}", end=" ", flush=True)
+                    for wi in range(w):
+                        for ci in range(c, 0, -1):
+                            ci -= 1
                             logits = self(samples)[:, :, hi, wi].squeeze()
                             logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
                             probs = logits.softmax(dim=1)
                             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
                             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
-
-                # for hi in range(h):
-                #     print(f"{hi}", end=" ", flush=True)
-                #     for wi in range(w):
-                #         for ci in range(c):
-                #             logits = self(samples)[:, :, hi, wi].squeeze()
-                #             logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
-                #             probs = logits.softmax(dim=1)
-                #             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
-                #             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
                 print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
 

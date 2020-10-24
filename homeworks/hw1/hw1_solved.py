@@ -577,7 +577,7 @@ def q4_a(train_data, test_data, image_shape):
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
-    model = nn_.PixelCNNGated(in_channels=c, n_filters=32, kernel_size=5, n_layers=5,
+    model = nn_.PixelCNNGated(in_channels=c, n_filters=32, kernel_size=7, n_layers=5,
                               colcats=COLCATS).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
