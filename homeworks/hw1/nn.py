@@ -161,7 +161,6 @@ class MaskedConv2d(nn.Conv2d):
             raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
         else:
             mid = self.kernel_size[0] // 2
-            print('mid = ', mid)
         mask = torch.zeros_like(self.weight)
         mask[:, :, :mid, :] = 1.
         mask[:, :, mid, :mid] = 1.
@@ -205,21 +204,6 @@ class ResBlock(nn.Module):
         y = self.conv2(F.relu(y))
         y = self.conv3(F.relu(y))
         return x + y
-
-# class LayerNorm(nn.LayerNorm):
-#     def __init__(self, color_conditioning=True, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.color_conditioning = color_conditioning
-
-#     def forward(self, x):
-#         x = x.permute(0, 2, 3, 1).contiguous()
-#         x_shape = x.shape
-#         if self.color_conditioning:
-#             x = x.contiguous().view(*(x_shape[:-1] + (3, -1)))
-#         x = super().forward(x)
-#         if self.color_conditioning:
-#             x = x.view(*x_shape)
-#         return x.permute(0, 3, 1, 2).contiguous()
 
 
 class LayerNorm(nn.LayerNorm):
@@ -306,19 +290,14 @@ class MaskedConv2dVertical(nn.Conv2d):
 
     def __init__(self, in_channels, out_channels, kernel_size, mask):
         padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=True)
+        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=False)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
-        self.bias2 = nn.Parameter(torch.Tensor(out_channels))
-        nn.init.kaiming_uniform_(self.weight2)
-        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight2)
-        bound = 1 / fan_in**0.5
-        nn.init.uniform_(self.bias2, -bound, bound)
         self.mask = mask
 
     def forward(self, input):
         a1 = F.conv2d(input, self.weight * self.mask, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
-        a2 = F.conv2d(input, self.weight2 * self.mask, self.bias2, self.stride,
+        a2 = F.conv2d(input, self.weight2 * self.mask, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
         return a1, a2
 
@@ -329,19 +308,14 @@ class MaskedConv2dHorizontal(nn.Conv2d):
 
     def __init__(self, in_channels, out_channels, kernel_size, mask):
         padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=True)
+        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=False)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
-        self.bias2 = nn.Parameter(torch.Tensor(out_channels))
-        nn.init.kaiming_uniform_(self.weight2)
-        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight2)
-        bound = 1 / fan_in**0.5
-        nn.init.uniform_(self.bias2, -bound, bound)
         self.mask = mask
 
     def forward(self, input):
         a1 = F.conv2d(input, self.weight * self.mask, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
-        a2 = F.conv2d(input, self.weight2 * self.mask, self.bias2, self.stride,
+        a2 = F.conv2d(input, self.weight2 * self.mask, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
         return a1, a2
 
