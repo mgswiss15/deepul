@@ -270,15 +270,25 @@ class PixelCNNResidual(nn.Module):
             else:
                 print(f"Sampling new examples with dependent channels ...", flush=True)
                 print(f"Rows: ", end="", flush=True)
-                for hi in range(h):
-                    print(f"{hi}", end=" ", flush=True)
-                    for wi in range(w):
-                        for ci in range(c):
+                for ci in range(c):
+                    for hi in range(h):
+                        print(f"{hi}", end=" ", flush=True)
+                        for wi in range(w):
                             logits = self(samples)[:, :, hi, wi].squeeze()
                             logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
                             probs = logits.softmax(dim=1)
                             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
                             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
+
+                # for hi in range(h):
+                #     print(f"{hi}", end=" ", flush=True)
+                #     for wi in range(w):
+                #         for ci in range(c):
+                #             logits = self(samples)[:, :, hi, wi].squeeze()
+                #             logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
+                #             probs = logits.softmax(dim=1)
+                #             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
+                #             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
                 print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
 
@@ -310,9 +320,7 @@ class MaskedConv2dHorizontal(nn.Conv2d):
     """Masked 2D convolution for horizontal stack as defined in Conditional
     Image Generation with PixelCNN Decoders."""
 
-    def __init__(self, masktype, in_channels, out_channels, kernel_size, mask):
-        if masktype not in ['A', 'B']:
-            raise Exception(f"Mask type has to be A or B, not {masktype}.")
+    def __init__(self, in_channels, out_channels, kernel_size, mask):
         padding = kernel_size // 2
         super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=True)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
@@ -334,10 +342,10 @@ class MaskedConv2dHorizontal(nn.Conv2d):
 class GatedLayer(nn.Module):
     """Gated convolution layer as defined in Conditional Image Generation with PixelCNN Decoders """
 
-    def __init__(self, masktype, in_channels, out_channels, kernel_size, maskvert, maskhoriz):
+    def __init__(self, in_channels, out_channels, kernel_size, maskvert, maskhoriz):
         super().__init__()
         self.vertical = MaskedConv2dVertical(in_channels, out_channels, kernel_size, maskvert)
-        self.horizontal = MaskedConv2dHorizontal(masktype, in_channels, out_channels, kernel_size, maskhoriz)
+        self.horizontal = MaskedConv2dHorizontal(in_channels, out_channels, kernel_size, maskhoriz)
         self.oneconv1 = nn.Conv2d(2*out_channels, 2*out_channels, 1, bias=True)
         self.oneconv2 = nn.Conv2d(out_channels, in_channels, 1, bias=True)
 
@@ -359,20 +367,19 @@ class PixelCNNGated(nn.Module):
     def __init__(self, in_channels, n_filters, kernel_size, n_layers, colcats):
         super().__init__()
         self.colcats = colcats
-        maskV = self.makemask('V', in_channels, n_filters, kernel_size)
-        maskHA = self.makemask('HA', in_channels, n_filters, kernel_size)
-        maskHB = self.makemask('HB', in_channels, n_filters, kernel_size)
-        self.start = GatedLayer('A', in_channels, n_filters, kernel_size, maskV, maskHA)
+        self.start = nn.Conv2d(in_channels, n_filters, 1)
+        maskV = self.makemask('V', n_filters, n_filters, kernel_size)
+        maskH = self.makemask('H', n_filters, n_filters, kernel_size)
         layers = []
         for _ in range(n_layers):
-            layers.append(GatedLayer('B', in_channels, n_filters, kernel_size, maskV, maskHB))
+            layers.append(GatedLayer(n_filters, n_filters, kernel_size, maskV, maskH))
         self.gated = nn.ModuleList(layers)
-        self.final = MaskedConv2d('B', in_channels, in_channels*colcats, 1)
+        self.final = nn.Conv2d(n_filters, in_channels*colcats, 1)
 
     def makemask(self, masktype, in_channels, out_channels, kernel_size):
         kernel_size = _pair(kernel_size)
-        if masktype not in ['HA', 'HB', 'V']:
-            raise Exception(f"Mask type has to be HA or HB or V, not {masktype}.")
+        if masktype not in ['H', 'V']:
+            raise Exception(f"Mask type has to be H or V, not {masktype}.")
         if (kernel_size[0] % 2) == 0:
             raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
         else:
@@ -381,24 +388,29 @@ class PixelCNNGated(nn.Module):
         if masktype == 'V':
             mask[:, :, :mid, :] = 1.
         else:
-            mask[:, :, mid, :mid] = 1.
-            red = n_channels // 3
-            if (red != n_channels / 3):
-                raise Exception(f"Invalid n_channels {n_channels}, has to be divisible by 3.")
-            green = 2 * red
-            if masktype == 'HB':
-                mask[:red, :, mid, mid] = 1.
-                mask[red:green, red:, mid, mid] = 1.
-                mask[green:, green:, mid, mid] = 1.
-            else:
-                mask[:red, red:, mid, mid] = 1.
-                mask[red:green, green:, mid, mid] = 1.
+            mask[:, :, mid, :mid+1] = 1.
+            # redin = in_channels // 3
+            # redout = out_channels // 3
+            # if (redin != in_channels / 3):
+            #     raise Exception(f"Invalid in_channels {in_channels}, has to be divisible by 3.")
+            # if (redout != out_channels / 3):
+            #     raise Exception(f"Invalid out_channels {out_channels}, has to be divisible by 3.")
+            # greenin = 2 * redin
+            # greenout = 2 * redout
+            # if masktype == 'HB':
+            #     mask[:, :redin, mid, mid] = 1.
+            #     mask[redout:, redin:greenin, mid, mid] = 1.
+            #     mask[greenout:, greenin:, mid, mid] = 1.
+            # else:
+            #     mask[redout:, :redin, mid, mid] = 1.
+            #     mask[greenout:, redin:greenin, mid, mid] = 1.
         return nn.Parameter(mask, requires_grad=False)
 
     def forward(self, x):
         # batches are lists of data, labels in conditional models so take just data
         x = x[0] if isinstance(x, list) else x
-        vert, horiz = self.start(x, x)
+        x = self.start(x)
+        vert, horiz = x, x
         for layer in self.gated:
             vert, horiz = layer(vert, horiz)
         return self.final(horiz)
@@ -412,16 +424,15 @@ class PixelCNNGated(nn.Module):
             samples = samples.reshape(n_samples, c, h, w)
             samples = rescale(samples, 0., self.colcats - 1.).to(device)
             print(f"Sampling new examples with dependent channels ...", flush=True)
-            for ci in range(c):
-                print(f"Channel {ci}", flush=True)
-                print(f"Rows: ", end="", flush=True)
-                for hi in range(h):
-                    print(f"{hi}", end=" ", flush=True)
-                    for wi in range(w):
-                        logits = self(samples)[:, :, hi, wi].squeeze()
-                        logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
-                        probs = logits.softmax(dim=1)
-                        samples_flat = torch.multinomial(probs, 1).squeeze()
-                        samples[:, ci, hi, wi] = rescale(samples_flat, 0., self.colcats - 1.)
-                print(f"", flush=True)  # print newline symbol after all rows
+            print(f"Rows: ", end="", flush=True)
+            for hi in range(h):
+                print(f"{hi}", end=" ", flush=True)
+                for wi in range(w):
+                    logits = self(samples)[:, :, hi, wi].squeeze()
+                    logits = logits.view(n_samples, self.colcats, c).permute(0, 2, 1)
+                    probs = logits.reshape(n_samples*c, self.colcats).softmax(dim=1)
+                    samples_flat = torch.multinomial(probs, 1).squeeze()
+                    samples_flat = samples_flat.view(n_samples, c)
+                    samples[:, :, hi, wi] = rescale(samples_flat, 0., self.colcats - 1.)
+            print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
