@@ -161,6 +161,7 @@ class MaskedConv2d(nn.Conv2d):
             raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
         else:
             mid = self.kernel_size[0] // 2
+            print('mid = ', mid)
         mask = torch.zeros_like(self.weight)
         mask[:, :, :mid, :] = 1.
         mask[:, :, mid, :mid] = 1.
@@ -177,19 +178,12 @@ class MaskedConv2d(nn.Conv2d):
             mask[redout:greenout, redin:greenin, mid, mid] = 1.
             mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'B':
-            mask[:redout, :, mid, mid] = 1.
-            mask[redout:greenout, redin:, mid, mid] = 1.
+            mask[:, :redin, mid, mid] = 1.
+            mask[redout:, redin:greenin, mid, mid] = 1.
             mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'A' and not indepchannels:
-            mask[:redout, redin:, mid, mid] = 1.
-            mask[redout:greenout, greenin:, mid, mid] = 1.
-       #  elif masktype == 'B':
-       #      mask[:, :redin, mid, mid] = 1.
-       #      mask[redout:, redin:greenin, mid, mid] = 1.
-       #      mask[greenout:, greenin:, mid, mid] = 1.
-       #  elif masktype == 'A' and not indepchannels:
-       #      mask[redout:, :redin, mid, mid] = 1.
-       #      mask[greenout:, redin:greenin, mid, mid] = 1.
+            mask[redout:, :redin, mid, mid] = 1.
+            mask[greenout:, redin:greenin, mid, mid] = 1.
         self.mask = nn.Parameter(mask, requires_grad=False)
 
     def forward(self, input):
@@ -220,11 +214,12 @@ class LayerNorm(nn.LayerNorm):
         super().__init__(normalized_shape, elementwise_affine=False)
 
     def forward(self, x):
-        n, c, h, w = x.shape
-        # careful here about splitting colour channels as in loss_func
-        x = x.view(n, c // 3, 3, h, w).permute(0, 2, 3, 4, 1)
-        x = super().forward(x)
-        return x.permute(0, 4, 1, 2, 3).reshape(n, c, h, w)
+        return x
+        # n, c, h, w = x.shape
+        # # careful here about splitting colour channels as in loss_func
+        # x = x.view(n, c // 3, 3, h, w).permute(0, 2, 3, 4, 1)
+        # x = super().forward(x)
+        # return x.permute(0, 4, 1, 2, 3).reshape(n, c, h, w)
 
 
 class PixelCNNResidual(nn.Module):
