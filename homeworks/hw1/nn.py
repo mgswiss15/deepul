@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from homeworks.hw1.utils import rescale, descale
+from torch.nn.modules.utils import _pair
 
 
 class MaskedLinear(nn.Linear):
@@ -172,16 +173,16 @@ class MaskedConv2d(nn.Conv2d):
         greenin = 2 * redin
         greenout = 2 * redout
         if masktype == 'B' and indepchannels:
-            mask[:redin, :redout, mid, mid] = 1.
-            mask[redin:greenin, redout:greenout, mid, mid] = 1.
-            mask[greenin:, greenout:, mid, mid] = 1.
+            mask[:redout, :redin, mid, mid] = 1.
+            mask[redout:greenout, redin:greenin, mid, mid] = 1.
+            mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'B':
-            mask[:redin, :, mid, mid] = 1.
-            mask[redin:greenin, redout:, mid, mid] = 1.
-            mask[greenin:, greenout:, mid, mid] = 1.
+            mask[:, :redin, mid, mid] = 1.
+            mask[redout:, redin:greenin, mid, mid] = 1.
+            mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'A' and not indepchannels:
-            mask[:redin, redout:, mid, mid] = 1.
-            mask[redin:greenin, greenout:, mid, mid] = 1.
+            mask[redout:, :redin, mid, mid] = 1.
+            mask[greenout:, redin:greenin, mid, mid] = 1.
         self.mask = nn.Parameter(mask, requires_grad=False)
 
     def forward(self, input):
@@ -286,7 +287,7 @@ class MaskedConv2dVertical(nn.Conv2d):
     """Masked 2D convolution for vertical stack as defined in Conditional
     Image Generation with PixelCNN Decoders."""
 
-    def __init__(self, in_channels, out_channels, kernel_size):
+    def __init__(self, in_channels, out_channels, kernel_size, mask):
         padding = kernel_size // 2
         super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=True)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
@@ -295,13 +296,7 @@ class MaskedConv2dVertical(nn.Conv2d):
         fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight2)
         bound = 1 / fan_in**0.5
         nn.init.uniform_(self.bias2, -bound, bound)
-        if (self.kernel_size[0] % 2) == 0:
-            raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
-        else:
-            mid = self.kernel_size[0] // 2
-        mask = torch.zeros_like(self.weight)
-        mask[:, :, :mid, :] = 1.
-        self.mask = nn.Parameter(mask, requires_grad=False)
+        self.mask = mask
 
     def forward(self, input):
         a1 = F.conv2d(input, self.weight * self.mask, self.bias, self.stride,
@@ -315,7 +310,7 @@ class MaskedConv2dHorizontal(nn.Conv2d):
     """Masked 2D convolution for horizontal stack as defined in Conditional
     Image Generation with PixelCNN Decoders."""
 
-    def __init__(self, masktype, in_channels, out_channels, kernel_size):
+    def __init__(self, masktype, in_channels, out_channels, kernel_size, mask):
         if masktype not in ['A', 'B']:
             raise Exception(f"Mask type has to be A or B, not {masktype}.")
         padding = kernel_size // 2
@@ -326,28 +321,7 @@ class MaskedConv2dHorizontal(nn.Conv2d):
         fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight2)
         bound = 1 / fan_in**0.5
         nn.init.uniform_(self.bias2, -bound, bound)
-        if (self.kernel_size[0] % 2) == 0:
-            raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
-        else:
-            mid = self.kernel_size[0] // 2
-        mask = torch.zeros_like(self.weight)
-        mask[:, :, mid, :mid] = 1.
-        redin = in_channels // 3
-        redout = out_channels // 3
-        if (redin != in_channels / 3):
-            raise Exception(f"Invalid in_channels {in_channels}, has to be divisible by 3.")
-        if (redout != out_channels / 3):
-            raise Exception(f"Invalid out_channels {out_channels}, has to be divisible by 3.")
-        greenin = 2 * redin
-        greenout = 2 * redout
-        if masktype == 'B':
-            mask[:redin, :, mid, mid] = 1.
-            mask[redin:greenin, redout:, mid, mid] = 1.
-            mask[greenin:, greenout:, mid, mid] = 1.
-        else:
-            mask[:redin, redout:, mid, mid] = 1.
-            mask[redin:greenin, greenout:, mid, mid] = 1.
-        self.mask = nn.Parameter(mask, requires_grad=False)
+        self.mask = mask
 
     def forward(self, input):
         a1 = F.conv2d(input, self.weight * self.mask, self.bias, self.stride,
@@ -360,12 +334,12 @@ class MaskedConv2dHorizontal(nn.Conv2d):
 class GatedLayer(nn.Module):
     """Gated convolution layer as defined in Conditional Image Generation with PixelCNN Decoders """
 
-    def __init__(self, masktype, n_channels, kernel_size):
+    def __init__(self, masktype, in_channels, out_channels, kernel_size, maskvert, maskhoriz):
         super().__init__()
-        self.vertical = MaskedConv2dVertical(n_channels, n_channels, kernel_size)
-        self.horizontal = MaskedConv2dHorizontal(masktype, n_channels, n_channels, kernel_size)
-        self.oneconv1 = nn.Conv2d(2*n_channels, 2*n_channels, 1, bias=True)
-        self.oneconv2 = nn.Conv2d(n_channels, n_channels, 1, bias=True)
+        self.vertical = MaskedConv2dVertical(in_channels, out_channels, kernel_size, maskvert)
+        self.horizontal = MaskedConv2dHorizontal(masktype, in_channels, out_channels, kernel_size, maskhoriz)
+        self.oneconv1 = nn.Conv2d(2*out_channels, 2*out_channels, 1, bias=True)
+        self.oneconv2 = nn.Conv2d(out_channels, in_channels, 1, bias=True)
 
     def forward(self, vert, horiz):
         va1, va2 = self.vertical(vert)
@@ -382,15 +356,44 @@ class GatedLayer(nn.Module):
 class PixelCNNGated(nn.Module):
     """PixelCNN model with residual blocks."""
 
-    def __init__(self, in_channels, kernel_size, n_layers, colcats):
+    def __init__(self, in_channels, n_filters, kernel_size, n_layers, colcats):
         super().__init__()
         self.colcats = colcats
-        self.start = GatedLayer('A', in_channels, kernel_size)
+        maskV = self.makemask('V', in_channels, n_filters, kernel_size)
+        maskHA = self.makemask('HA', in_channels, n_filters, kernel_size)
+        maskHB = self.makemask('HB', in_channels, n_filters, kernel_size)
+        self.start = GatedLayer('A', in_channels, n_filters, kernel_size, maskV, maskHA)
         layers = []
         for _ in range(n_layers):
-            layers.append(GatedLayer('B', in_channels, kernel_size))
+            layers.append(GatedLayer('B', in_channels, n_filters, kernel_size, maskV, maskHB))
         self.gated = nn.ModuleList(layers)
         self.final = MaskedConv2d('B', in_channels, in_channels*colcats, 1)
+
+    def makemask(self, masktype, in_channels, out_channels, kernel_size):
+        kernel_size = _pair(kernel_size)
+        if masktype not in ['HA', 'HB', 'V']:
+            raise Exception(f"Mask type has to be HA or HB or V, not {masktype}.")
+        if (kernel_size[0] % 2) == 0:
+            raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
+        else:
+            mid = kernel_size[0] // 2
+        mask = torch.zeros(out_channels, in_channels, *kernel_size)
+        if masktype == 'V':
+            mask[:, :, :mid, :] = 1.
+        else:
+            mask[:, :, mid, :mid] = 1.
+            red = n_channels // 3
+            if (red != n_channels / 3):
+                raise Exception(f"Invalid n_channels {n_channels}, has to be divisible by 3.")
+            green = 2 * red
+            if masktype == 'HB':
+                mask[:red, :, mid, mid] = 1.
+                mask[red:green, red:, mid, mid] = 1.
+                mask[green:, green:, mid, mid] = 1.
+            else:
+                mask[:red, red:, mid, mid] = 1.
+                mask[red:green, green:, mid, mid] = 1.
+        return nn.Parameter(mask, requires_grad=False)
 
     def forward(self, x):
         # batches are lists of data, labels in conditional models so take just data
