@@ -449,7 +449,7 @@ def q3_c(train_data, test_data, image_shape, dset_id):
                                  batch_size=BATCH_SIZE, shuffle=True)
         testloader = DataLoader(TensorDataset(test_data, test_targets),
                                 batch_size=BATCH_SIZE)
-        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE)
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, clip_grads=True)
         l_train, l_test = learner.fit(MAX_EPOCHS)
         losses_train.extend(l_train)
         losses_test.extend(l_test)

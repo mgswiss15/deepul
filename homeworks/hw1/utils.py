@@ -6,13 +6,14 @@ import torch
 class Learner():
     """Class for model training."""
 
-    def __init__(self, model, optimizer, trainloader, testloader, loss_func, device):
+    def __init__(self, model, optimizer, trainloader, testloader, loss_func, device, clip_grads=False):
         self.model = model
         self.optimizer = optimizer
         self.trainloader = trainloader
         self.testloader = testloader
         self.loss_func = loss_func
         self.device = device
+        self.clip_grads = clip_grads
 
     def fit(self, epochs):
         losses_train = []
@@ -35,6 +36,8 @@ class Learner():
             out = self.model(batch[:-1])
             loss = self.loss_func(out, batch[-1])
             loss.backward()
+            if self.clip_grads:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
             self.optimizer.step()
             losses.append(loss.item())
         return losses
