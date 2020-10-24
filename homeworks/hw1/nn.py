@@ -177,12 +177,19 @@ class MaskedConv2d(nn.Conv2d):
             mask[redout:greenout, redin:greenin, mid, mid] = 1.
             mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'B':
-            mask[:, :redin, mid, mid] = 1.
-            mask[redout:, redin:greenin, mid, mid] = 1.
+            mask[:redout, :, mid, mid] = 1.
+            mask[redout:greenout, redin:, mid, mid] = 1.
             mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'A' and not indepchannels:
-            mask[redout:, :redin, mid, mid] = 1.
-            mask[greenout:, redin:greenin, mid, mid] = 1.
+            mask[:redout, redin:, mid, mid] = 1.
+            mask[redout:greenout, greenin:, mid, mid] = 1.
+       #  elif masktype == 'B':
+       #      mask[:, :redin, mid, mid] = 1.
+       #      mask[redout:, redin:greenin, mid, mid] = 1.
+       #      mask[greenout:, greenin:, mid, mid] = 1.
+       #  elif masktype == 'A' and not indepchannels:
+       #      mask[redout:, :redin, mid, mid] = 1.
+       #      mask[greenout:, redin:greenin, mid, mid] = 1.
         self.mask = nn.Parameter(mask, requires_grad=False)
 
     def forward(self, input):
@@ -250,9 +257,9 @@ class PixelCNNResidual(nn.Module):
         self.eval()
         with torch.no_grad():
             h, w, c = image_shape
-            # samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
-            #                             n_samples*c*h*w, replacement=True)
-            samples = torch.ones(n_samples, c, h, w)
+            samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
+                                        n_samples*c*h*w, replacement=True)
+            samples = samples.view(n_samples, c, h, w)
             samples = rescale(samples, 0., self.colcats - 1.).to(device)
             if self.indepchannels:
                 print(f"Sampling new examples with independent channels ...", flush=True)
