@@ -288,47 +288,54 @@ class MaskedConv2dVertical(nn.Conv2d):
     """Masked 2D convolution for vertical stack as defined in Conditional
     Image Generation with PixelCNN Decoders."""
 
-    def __init__(self, in_channels, out_channels, kernel_size, mask):
+    def __init__(self, in_channels, out_channels, kernel_size):
         padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=False)
+        super().__init__(in_channels, out_channels, (padding, kernel_size), padding=padding, bias=False)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
-        self.mask = mask
 
     def forward(self, input):
-        a1 = F.conv2d(input, self.weight * self.mask, self.bias, self.stride,
+        a1 = F.conv2d(input, self.weight, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
-        a2 = F.conv2d(input, self.weight2 * self.mask, self.bias, self.stride,
+        a2 = F.conv2d(input, self.weight2, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
-        return a1, a2
+        h = input.shape[2]
+        return a1[:, :, :h, :], a2[:, :, :h, :]
 
 
 class MaskedConv2dHorizontal(nn.Conv2d):
     """Masked 2D convolution for horizontal stack as defined in Conditional
     Image Generation with PixelCNN Decoders."""
 
-    def __init__(self, in_channels, out_channels, kernel_size, mask):
+    def __init__(self, masktype, in_channels, out_channels, kernel_size):
+        self.masktype = masktype
+        if masktype not in ['A', 'B']:
+            raise Exception(f"Mask type has to be A or B, not {masktype}.")
         padding = kernel_size // 2
-        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=False)
+        ksize = kernel_size // 2
+        ksize += 1 if masktype == 'B' else 0
+        super().__init__(in_channels, out_channels, (1, ksize), padding=(0, padding), bias=False)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
-        self.mask = mask
 
     def forward(self, input):
-        a1 = F.conv2d(input, self.weight * self.mask, self.bias, self.stride,
+        a1 = F.conv2d(input, self.weight, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
-        a2 = F.conv2d(input, self.weight2 * self.mask, self.bias, self.stride,
+        a2 = F.conv2d(input, self.weight2, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
-        return a1, a2
+        w = input.shape[3]
+        return a1[:, :, :, :w], a2[:, :, :, :w]
 
 
 class GatedLayer(nn.Module):
     """Gated convolution layer as defined in Conditional Image Generation with PixelCNN Decoders """
 
-    def __init__(self, in_channels, out_channels, kernel_size, maskvert, maskhoriz):
+    def __init__(self, masktype, n_filters, kernel_size):
+        if masktype not in ['A', 'B']:
+            raise Exception(f"Mask type has to be A or B, not {masktype}.")
         super().__init__()
-        self.vertical = MaskedConv2dVertical(in_channels, out_channels, kernel_size, maskvert)
-        self.horizontal = MaskedConv2dHorizontal(in_channels, out_channels, kernel_size, maskhoriz)
-        self.oneconv1 = nn.Conv2d(2*out_channels, 2*out_channels, 1, bias=True)
-        self.oneconv2 = nn.Conv2d(out_channels, in_channels, 1, bias=True)
+        self.vertical = MaskedConv2dVertical(n_filters, n_filters, kernel_size)
+        self.horizontal = MaskedConv2dHorizontal(masktype, n_filters, n_filters, kernel_size)
+        self.oneconv1 = nn.Conv2d(2*n_filters, 2*n_filters, 1, bias=False)
+        self.oneconv2 = nn.Conv2d(n_filters, n_filters, 1, bias=False)
 
     def forward(self, vert, horiz):
         va1, va2 = self.vertical(vert)
@@ -349,28 +356,11 @@ class PixelCNNGated(nn.Module):
         super().__init__()
         self.colcats = colcats
         self.start = nn.Conv2d(in_channels, n_filters, 1)
-        maskV = self.makemask('V', n_filters, n_filters, kernel_size)
-        maskH = self.makemask('H', n_filters, n_filters, kernel_size)
-        layers = []
+        layers = [GatedLayer('A', n_filters, kernel_size)]
         for _ in range(n_layers):
-            layers.append(GatedLayer(n_filters, n_filters, kernel_size, maskV, maskH))
+            layers.append(GatedLayer('B', n_filters, kernel_size))
         self.gated = nn.ModuleList(layers)
         self.final = nn.Conv2d(n_filters, in_channels*colcats, 1)
-
-    def makemask(self, masktype, in_channels, out_channels, kernel_size):
-        kernel_size = _pair(kernel_size)
-        if masktype not in ['H', 'V']:
-            raise Exception(f"Mask type has to be H or V, not {masktype}.")
-        if (kernel_size[0] % 2) == 0:
-            raise Exception(f"Invalid kernel_size {kernel_size}, has to be odd.")
-        else:
-            mid = kernel_size[0] // 2
-        mask = torch.zeros(out_channels, in_channels, *kernel_size)
-        if masktype == 'V':
-            mask[:, :, :mid, :] = 1.
-        else:
-            mask[:, :, mid, :mid+1] = 1.
-        return nn.Parameter(mask, requires_grad=False)
 
     def forward(self, x):
         # batches are lists of data, labels in conditional models so take just data
@@ -395,7 +385,7 @@ class PixelCNNGated(nn.Module):
                 print(f"{hi}", end=" ", flush=True)
                 for wi in range(w):
                     logits = self(samples)[:, :, hi, wi].squeeze()
-                    logits = logits.view(n_samples, self.colcats, c).permute(0, 2, 1)
+                    logits = logits.view(n_samples, c, self.colcats)
                     probs = logits.reshape(n_samples*c, self.colcats).softmax(dim=1)
                     samples_flat = torch.multinomial(probs, 1).squeeze()
                     samples_flat = samples_flat.view(n_samples, c)

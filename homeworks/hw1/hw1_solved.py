@@ -573,11 +573,11 @@ def q4_a(train_data, test_data, image_shape):
 
     def loss_func(logits, targets):
         """Cross entropy."""
-        logits = logits.view(-1, COLCATS, c, h, w)
+        logits = logits.view(-1, c, COLCATS, h, w).permute(0, 2, 1, 3, 4)
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
-    model = nn_.PixelCNNGated(in_channels=c, n_filters=32, kernel_size=7, n_layers=5,
+    model = nn_.PixelCNNGated(in_channels=c, n_filters=32, kernel_size=7, n_layers=8,
                               colcats=COLCATS).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
