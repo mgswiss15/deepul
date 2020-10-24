@@ -252,7 +252,7 @@ class PixelCNNResidual(nn.Module):
             h, w, c = image_shape
             # samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
             #                             n_samples*c*h*w, replacement=True)
-            samples = torch.ones(n_samples*c*h*w)
+            samples = torch.ones(n_samples, c, h, w)
             samples = rescale(samples, 0., self.colcats - 1.).to(device)
             if self.indepchannels:
                 print(f"Sampling new examples with independent channels ...", flush=True)
