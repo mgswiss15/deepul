@@ -544,3 +544,71 @@ def q3_d(train_data, train_labels, test_data, test_labels, image_shape, n_classe
     samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy()
+
+
+def q4_a(train_data, test_data, image_shape):
+    """
+    train_data: A (n_train, H, W, C) uint8 numpy array of color images with values in {0, 1, 2, 3}
+    test_data: A (n_test, H, W, C) uint8 numpy array of color images with values in {0, 1, 2, 3}
+    image_shape: (H, W, C), height, width, and # of channels of the image
+
+    Returns
+    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
+    - a numpy array of size (100, H, W, C) of generated samples with values in {0, 1, 2, 3}
+    """
+
+    # DEVICE is defined and assigned to this module in main
+    print(f"Training q4_a on {DEVICE}.")
+
+    modelpath = f'{resultsdir}/q4_a_model.pickle'
+
+    COLCATS = 4
+
+    train_targets, train_data = prep_data(train_data, COLCATS, torch.int64)
+    test_targets, test_data = prep_data(test_data, COLCATS, torch.int64)
+
+    h, w, c = image_shape
+    n_dims = c * h * w
+
+    def loss_func(logits, targets):
+        """Cross entropy."""
+        logits = logits.view(-1, COLCATS, c, h, w)
+        loss = F.cross_entropy(logits, targets, reduction='none')
+        return loss.sum(dim=(1, 2, 3)).mean(dim=0)
+
+    model = nn_.PixelCNNGated(in_channels=c, n_filters=120, kernel_size=7, n_resblocks=8,
+                              colcats=COLCATS).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_data, train_targets),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data, test_targets),
+                                batch_size=BATCH_SIZE)
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        Path(modelpath).parent.mkdir(parents=True, exist_ok=True)
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
+
+    return np.array(losses_train), np.array(losses_test), samples.numpy()

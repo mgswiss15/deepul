@@ -10,7 +10,8 @@ parser.add_argument("--gpu", action="store_true",
                     help="Training on gpu.")
 
 parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2_a", "q2_b",
-                                             "q3_a", "q3_b", "q3_c", "q3_d"],
+                                             "q3_a", "q3_b", "q3_c", "q3_d",
+                                             "q4_a", "q4_b"],
                     help="Code of hw to do.")
 
 parser.add_argument("ds", type=int, choices=[1, 2],
@@ -68,6 +69,12 @@ elif args.ex == "q3_c":
     q3bc_save_results(args.ds, 'c', hw1.q3_c)
 elif args.ex == "q3_d":
     q3d_save_results(args.ds, hw1.q3_d)
+elif args.ex == "q4_a":
+    q4a_save_results(hw1.q4_a)
+elif args.ex == "q4_b":
+    q4b_save_results(hw1.q4_b)
+
+
 
 sys.stdout = origout
 sys.err = origerr
