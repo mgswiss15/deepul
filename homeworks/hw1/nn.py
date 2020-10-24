@@ -292,6 +292,7 @@ class MaskedConv2dVertical(nn.Conv2d):
         padding = kernel_size // 2
         super().__init__(in_channels, out_channels, (padding, kernel_size), padding=padding, bias=False)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
+        nn.init.kaiming_uniform_(self.weight2)
 
     def forward(self, input):
         a1 = F.conv2d(input, self.weight, self.bias, self.stride,
@@ -315,6 +316,7 @@ class MaskedConv2dHorizontal(nn.Conv2d):
         ksize += 1 if masktype == 'B' else 0
         super().__init__(in_channels, out_channels, (1, ksize), padding=(0, padding), bias=False)
         self.weight2 = nn.Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
+        nn.init.kaiming_uniform_(self.weight2)
 
     def forward(self, input):
         a1 = F.conv2d(input, self.weight, self.bias, self.stride,

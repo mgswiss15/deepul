@@ -577,7 +577,7 @@ def q4_a(train_data, test_data, image_shape):
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
-    model = nn_.PixelCNNGated(in_channels=c, n_filters=32, kernel_size=7, n_layers=8,
+    model = nn_.PixelCNNGated(in_channels=c, n_filters=12, kernel_size=7, n_layers=5,
                               colcats=COLCATS).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
@@ -612,3 +612,20 @@ def q4_a(train_data, test_data, image_shape):
     samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy()
+
+
+def q4_b(train_data, test_data, image_shape):
+    """
+    train_data: A (n_train, H, W, C) uint8 numpy array of color images with values in {0, 1, 2, 3}
+    test_data: A (n_test, H, W, C) uint8 numpy array of color images with values in {0, 1, 2, 3}
+    image_shape: (H, W, C), height, width, and # of channels of the image
+
+    Returns
+    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
+    - a numpy array of size (50, H, W, 1) of generated binary images in {0, 1}
+    - a numpy array of size (50, H, W, C) of conditonally generated color images in {0, 1, 2, 3}
+    """
+    # You will need to generate the binary image dataset from train_data and test_data
+
+    """ YOUR CODE HERE """
