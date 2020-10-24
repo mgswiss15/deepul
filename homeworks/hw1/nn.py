@@ -273,17 +273,12 @@ class PixelCNNResidual(nn.Module):
                 for hi in range(h):
                     print(f"{hi}", end=" ", flush=True)
                     for wi in range(w):
-                        print('Before', hi, wi, samples[:2, :, hi, wi])
                         for ci in range(c):
                             logits = self(samples)[:, :, hi, wi].squeeze()
-                            print(logits.shape)
                             logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
                             probs = logits.softmax(dim=1)
                             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
                             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
-                            print('After', ci, hi, wi, samples[:2, :, hi, wi])
-                        if wi == 1:
-                            return
                 print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
 
