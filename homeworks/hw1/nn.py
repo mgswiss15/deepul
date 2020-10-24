@@ -206,6 +206,21 @@ class ResBlock(nn.Module):
         y = self.conv3(F.relu(y))
         return x + y
 
+# class LayerNorm(nn.LayerNorm):
+#     def __init__(self, color_conditioning=True, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.color_conditioning = color_conditioning
+
+#     def forward(self, x):
+#         x = x.permute(0, 2, 3, 1).contiguous()
+#         x_shape = x.shape
+#         if self.color_conditioning:
+#             x = x.contiguous().view(*(x_shape[:-1] + (3, -1)))
+#         x = super().forward(x)
+#         if self.color_conditioning:
+#             x = x.view(*x_shape)
+#         return x.permute(0, 3, 1, 2).contiguous()
+
 
 class LayerNorm(nn.LayerNorm):
     """Layer norm for masked conv2d in PixelCNN."""
@@ -215,11 +230,11 @@ class LayerNorm(nn.LayerNorm):
 
     def forward(self, x):
         return x
-        # n, c, h, w = x.shape
-        # # careful here about splitting colour channels as in loss_func
-        # x = x.view(n, c // 3, 3, h, w).permute(0, 2, 3, 4, 1)
-        # x = super().forward(x)
-        # return x.permute(0, 4, 1, 2, 3).reshape(n, c, h, w)
+        n, c, h, w = x.shape
+        # careful here about splitting colour channels as in loss_func
+        x = x.view(n, 3, c // 3, h, w).permute(0, 1, 3, 4, 2)
+        x = super().forward(x)
+        return x.permute(0, 1, 4, 2, 3).reshape(n, c, h, w)
 
 
 class PixelCNNResidual(nn.Module):
@@ -263,10 +278,10 @@ class PixelCNNResidual(nn.Module):
                     print(f"{hi}", end=" ", flush=True)
                     for wi in range(w):
                         logits = self(samples)[:, :, hi, wi].squeeze()
-                        logits = logits.view(n_samples, self.colcats, c)
-                        probs = logits.softmax(dim=1)
+                        logits = logits.view(n_samples, c, self.colcats)
+                        probs = logits.softmax(dim=2)
                         for ci in range(c):
-                            samples[:, ci, hi, wi] = torch.multinomial(probs[..., ci], 1).squeeze()
+                            samples[:, ci, hi, wi] = torch.multinomial(probs[:, ci, :], 1).squeeze()
                         samples[:, :, hi, wi] = rescale(samples[:, :, hi, wi], 0., self.colcats - 1.)
                 print(f"", flush=True)  # print newline symbol after all rows
             else:
@@ -277,7 +292,7 @@ class PixelCNNResidual(nn.Module):
                     for wi in range(w):
                         for ci in range(c):
                             logits = self(samples)[:, :, hi, wi].squeeze()
-                            logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
+                            logits = logits.view(n_samples, c, self.colcats)[:, ci, :].squeeze()
                             probs = logits.softmax(dim=1)
                             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
                             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
@@ -381,21 +396,6 @@ class PixelCNNGated(nn.Module):
             mask[:, :, :mid, :] = 1.
         else:
             mask[:, :, mid, :mid+1] = 1.
-            # redin = in_channels // 3
-            # redout = out_channels // 3
-            # if (redin != in_channels / 3):
-            #     raise Exception(f"Invalid in_channels {in_channels}, has to be divisible by 3.")
-            # if (redout != out_channels / 3):
-            #     raise Exception(f"Invalid out_channels {out_channels}, has to be divisible by 3.")
-            # greenin = 2 * redin
-            # greenout = 2 * redout
-            # if masktype == 'HB':
-            #     mask[:, :redin, mid, mid] = 1.
-            #     mask[redout:, redin:greenin, mid, mid] = 1.
-            #     mask[greenout:, greenin:, mid, mid] = 1.
-            # else:
-            #     mask[redout:, :redin, mid, mid] = 1.
-            #     mask[greenout:, redin:greenin, mid, mid] = 1.
         return nn.Parameter(mask, requires_grad=False)
 
     def forward(self, x):

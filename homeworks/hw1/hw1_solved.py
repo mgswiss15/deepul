@@ -361,7 +361,7 @@ def q3_b(train_data, test_data, image_shape, dset_id):
 
     def loss_func(logits, targets):
         """Cross entropy."""
-        logits = logits.view(-1, COLCATS, c, h, w)
+        logits = logits.view(-1, c, COLCATS, h, w).permute(0, 2, 1, 3, 4)
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
@@ -431,7 +431,7 @@ def q3_c(train_data, test_data, image_shape, dset_id):
 
     def loss_func(logits, targets):
         """Cross entropy."""
-        logits = logits.view(-1, COLCATS, c, h, w)
+        logits = logits.view(-1, c, COLCATS, h, w).permute(0, 2, 1, 3, 4)
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
