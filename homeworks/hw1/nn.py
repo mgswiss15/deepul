@@ -250,9 +250,9 @@ class PixelCNNResidual(nn.Module):
         self.eval()
         with torch.no_grad():
             h, w, c = image_shape
-            samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
-                                        n_samples*c*h*w, replacement=True)
-            samples = samples.reshape(n_samples, c, h, w)
+            # samples = torch.multinomial(torch.ones(self.colcats)/self.colcats,
+            #                             n_samples*c*h*w, replacement=True)
+            samples = torch.ones(n_samples*c*h*w)
             samples = rescale(samples, 0., self.colcats - 1.).to(device)
             if self.indepchannels:
                 print(f"Sampling new examples with independent channels ...", flush=True)
@@ -273,13 +273,17 @@ class PixelCNNResidual(nn.Module):
                 for hi in range(h):
                     print(f"{hi}", end=" ", flush=True)
                     for wi in range(w):
-                        for ci in range(c, 0, -1):
-                            ci -= 1
+                        print('Before', hi, wi, samples[:2, :, hi, wi])
+                        for ci in range(c):
                             logits = self(samples)[:, :, hi, wi].squeeze()
+                            print(logits.shape)
                             logits = logits.view(n_samples, self.colcats, c)[:, :, ci].squeeze()
                             probs = logits.softmax(dim=1)
                             samples[:, ci, hi, wi] = torch.multinomial(probs, 1).squeeze()
                             samples[:, ci, hi, wi] = rescale(samples[:, ci, hi, wi], 0., self.colcats - 1.)
+                            print('After', ci, hi, wi, samples[:2, :, hi, wi])
+                        if wi == 1:
+                            return
                 print(f"", flush=True)  # print newline symbol after all rows
         return descale(samples.permute(0, 2, 3, 1), 0., self.colcats - 1.)
 
