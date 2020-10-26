@@ -10,6 +10,7 @@ from deepul.hw1_helper import resultsdir
 import homeworks.hw1.nn as nn_
 from homeworks.hw1.utils import Learner, rescale, reload_modelstate, prep_data
 from pathlib import Path
+from deepul.utils import show_samples
 
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
@@ -577,7 +578,7 @@ def q4_a(train_data, test_data, image_shape):
         loss = F.cross_entropy(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
-    model = nn_.PixelCNNGated(in_channels=c, n_filters=12, kernel_size=7, n_layers=5,
+    model = nn_.PixelCNNGated(in_channels=c, n_filters=120, kernel_size=7, n_layers=8,
                               colcats=COLCATS).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
@@ -628,4 +629,109 @@ def q4_b(train_data, test_data, image_shape):
     """
     # You will need to generate the binary image dataset from train_data and test_data
 
-    """ YOUR CODE HERE """
+    # DEVICE is defined and assigned to this module in main
+    print(f"Training q4_b on {DEVICE}.")
+
+    modelpath = f'{resultsdir}/q4_b_model.pickle'
+
+    train_orig = train_data
+    test_orig = test_data
+
+    COLCATS = 2
+
+    train_targets = torch.from_numpy(train_data).sum(dim=-1, keepdim=True) // 5.
+    test_targets = torch.from_numpy(test_data).sum(dim=-1, keepdim=True) // 5.
+    train_targets = train_targets.permute(0, 3, 1, 2)
+    test_targets = test_targets.permute(0, 3, 1, 2)
+    train_binary = rescale(train_targets, 0., COLCATS - 1.)
+    test_binary = rescale(test_targets, 0., COLCATS - 1.)
+
+    h, w = image_shape
+    n_dims = h * w
+
+    def loss_func(logits, targets):
+        """Binary cross etnropy."""
+        loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        return loss.sum(dim=(1, 2, 3)).mean(dim=0)
+
+    model_binary = nn_.PixelCNN(in_channels=1, n_filters=64, kernel_size=7, n_layers=5, colcats=COLCATS).to(DEVICE)
+    optimizer = optim.Adam(model_binary.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model_binary, optimizer, losses_train, losses_test = reload_modelstate(model_binary, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_binary, train_targets),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_binary, test_targets),
+                                batch_size=BATCH_SIZE)
+        learner = Learner(model_binary, optimizer, trainloader, testloader, loss_func, DEVICE)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        torch.save({'model_state_dict': model_binary.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples_binary = model_binary.sample_data(50, image_shape, DEVICE).to("cpu")
+
+    COLCATS = 4
+
+    train_targets, train_data = prep_data(train_orig, COLCATS, torch.int64)
+    test_targets, test_data = prep_data(test_orig, COLCATS, torch.int64)
+
+    h, w, c = image_shape
+    n_dims = c * h * w
+
+    def loss_func(logits, targets):
+        """Cross entropy."""
+        logits = logits.view(-1, c, COLCATS, h, w).permute(0, 2, 1, 3, 4)
+        loss = F.cross_entropy(logits, targets, reduction='none')
+        return loss.sum(dim=(1, 2, 3)).mean(dim=0)
+
+    model = nn_.PixelCNNGated(in_channels=c, n_filters=12, kernel_size=7, n_layers=5,
+                              colcats=COLCATS).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_data, train_binary, train_targets),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data, test_binary, test_targets),
+                                batch_size=BATCH_SIZE)
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, clip_grads=True)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        Path(modelpath).parent.mkdir(parents=True, exist_ok=True)
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples = model.sample_data(100, image_shape, DEVICE).to("cpu")
+
+    return np.array(losses_train), np.array(losses_test), samples.numpy()
