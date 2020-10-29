@@ -1,5 +1,63 @@
 from .utils import *
-from sklearn.datasets import make_moons
+
+resultsdir = '../hw2/results'
+
+
+def make_moons(n_samples=100, *, shuffle=True, noise=None, random_state=None):
+    """Stolen from sklearn Make two interleaving half circles
+    A simple toy dataset to visualize clustering and classification
+    algorithms. Read more in the :ref:`User Guide <sample_generators>`.
+    Parameters
+    ----------
+    n_samples : int or two-element tuple, optional (default=100)
+        If int, the total number of points generated.
+        If two-element tuple, number of points in each of two moons.
+    shuffle : bool, optional (default=True)
+        Whether to shuffle the samples.
+    noise : double or None (default=None)
+        Standard deviation of Gaussian noise added to the data.
+    random_state : int, RandomState instance, default=None
+        Determines random number generation for dataset shuffling and noise.
+        Pass an int for reproducible output across multiple function calls.
+        See :term:`Glossary <random_state>`.
+    Returns
+    -------
+    X : array of shape [n_samples, 2]
+        The generated samples.
+    y : array of shape [n_samples]
+        The integer labels (0 or 1) for class membership of each sample.
+    """
+
+    if isinstance(n_samples, numbers.Integral):
+        n_samples_out = n_samples // 2
+        n_samples_in = n_samples - n_samples_out
+    else:
+        try:
+            n_samples_out, n_samples_in = n_samples
+        except ValueError:
+            raise ValueError('`n_samples` can be either an int or '
+                             'a two-element tuple.')
+
+    generator = check_random_state(random_state)
+
+    outer_circ_x = np.cos(np.linspace(0, np.pi, n_samples_out))
+    outer_circ_y = np.sin(np.linspace(0, np.pi, n_samples_out))
+    inner_circ_x = 1 - np.cos(np.linspace(0, np.pi, n_samples_in))
+    inner_circ_y = 1 - np.sin(np.linspace(0, np.pi, n_samples_in)) - .5
+
+    X = np.vstack([np.append(outer_circ_x, inner_circ_x),
+                   np.append(outer_circ_y, inner_circ_y)]).T
+    y = np.hstack([np.zeros(n_samples_out, dtype=np.intp),
+                   np.ones(n_samples_in, dtype=np.intp)])
+
+    if shuffle:
+        X, y = util_shuffle(X, y, random_state=generator)
+
+    if noise is not None:
+        X += generator.normal(scale=noise, size=X.shape)
+
+    return X, y
+
 
 def make_scatterplot(points, title=None, filename=None):
     plt.figure()
@@ -120,9 +178,9 @@ def q1_save_results(dset_type, part, fn):
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
 
     save_training_plot(train_losses, test_losses, f'Q1({part}) Dataset {dset_type} Train Plot',
-                       f'results/q1_{part}_dset{dset_type}_train_plot.png')
-    show_2d_densities(densities, dset_type, fname=f'results/q1_{part}_dset{dset_type}_densities.png')
-    show_2d_latents(latents, train_labels, f'results/q1_{part}_dset{dset_type}_latents.png')
+                       f'{resultsdir}/q1_{part}_dset{dset_type}_train_plot.png')
+    show_2d_densities(densities, dset_type, fname=f'{resultsdir}/q1_{part}_dset{dset_type}_densities.png')
+    show_2d_latents(latents, train_labels, f'{resultsdir}/q1_{part}_dset{dset_type}_latents.png')
 
 
 ######################
@@ -148,9 +206,9 @@ def q2_save_results(fn):
 
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q2 Dataset Train Plot',
-                       f'results/q2_train_plot.png')
-    show_samples(samples * 255.0 / 2.0, f'results/q2_samples.png')
-    show_samples(floored_samples * 255.0, f'results/q2_flooredsamples.png', title='Samples with Flooring')
+                       f'{resultsdir}/q2_train_plot.png')
+    show_samples(samples * 255.0 / 2.0, f'{resultsdir}/q2_samples.png')
+    show_samples(floored_samples * 255.0, f'{resultsdir}/q2_flooredsamples.png', title='Samples with Flooring')
 
 ######################
 ##### Question 3 #####
@@ -181,6 +239,6 @@ def q3_save_results(fn, part):
 
     print(f'Final Test Loss: {test_losses[-1]:.4f}')
     save_training_plot(train_losses, test_losses, f'Q3 Dataset Train Plot',
-                       f'results/q3_{part}_train_plot.png')
-    show_samples(samples * 255.0, f'results/q3_{part}_samples.png')
-    show_samples(interpolations * 255.0, f'results/q3_{part}_interpolations.png', nrow=6, title='Interpolations')
+                       f'{resultsdir}/q3_{part}_train_plot.png')
+    show_samples(samples * 255.0, f'{resultsdir}/q3_{part}_samples.png')
+    show_samples(interpolations * 255.0, f'{resultsdir}/q3_{part}_interpolations.png', nrow=6, title='Interpolations')
