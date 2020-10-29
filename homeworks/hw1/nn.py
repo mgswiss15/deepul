@@ -37,7 +37,7 @@ class MaskedLinearOutput(nn.Linear):
 
 
 class MaskedLinearInOut(nn.Linear):
-    """Masked directn input-output linear layer for MADE."""
+    """Masked direct input-output linear layer for MADE."""
 
     def __init__(self, in_features, n_dims, bias=True):
         super().__init__(in_features, in_features, bias)
@@ -173,9 +173,9 @@ class MaskedConv2d(nn.Conv2d):
         greenin = 2 * redin
         greenout = 2 * redout
         if masktype == 'B' and indepchannels:
-            mask[:redout, :redin, mid, mid] = 1.
-            mask[redout:greenout, redin:greenin, mid, mid] = 1.
-            mask[greenout:, greenin:, mid, mid] = 1.
+            mask[:, :, mid, mid] = 1.
+            # mask[redout:greenout, redin:greenin, mid, mid] = 1.
+            # mask[greenout:, greenin:, mid, mid] = 1.
         elif masktype == 'B':
             mask[:, :redin, mid, mid] = 1.
             mask[redout:, redin:greenin, mid, mid] = 1.
