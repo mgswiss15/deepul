@@ -49,13 +49,15 @@ def q1_a(train_data, test_data, dset_id):
 
     n_dims = train_data.shape[-1]
 
+    N_COMPONENTS = 5
+
     def loss_func(z, logjacobs, aggregate=True):
         """Flow loss func: NLL for uniform z."""
         logpdf = logjacobs.sum(dim=1)
         logpdf = logpdf.mean() if aggregate else logpdf
         return -logpdf
 
-    model = nn_.AutoregressiveFlow(n_dims)
+    model = nn_.AutoregressiveFlow(n_dims, N_COMPONENTS)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
     trainloader = DataLoader(TensorDataset(train_data),
                              batch_size=BATCH_SIZE, shuffle=True)
