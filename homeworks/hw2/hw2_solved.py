@@ -44,12 +44,12 @@ def q1_a(train_data, test_data, dset_id):
 
     modelpath = f'{resultsdir}/q1_dset{dset_id}_model.pickle'
 
-    train_data = torch.from_numpy(train_data)
-    test_data = torch.from_numpy(test_data)
+    train_data = torch.from_numpy(train_data).float()
+    test_data = torch.from_numpy(test_data).float()
 
     n_dims = train_data.shape[-1]
 
-    N_COMPONENTS = 5
+    N_COMPONENTS = 10
 
     def loss_func(z, logjacobs, aggregate=True):
         """Flow loss func: NLL for uniform z."""
@@ -57,7 +57,7 @@ def q1_a(train_data, test_data, dset_id):
         logpdf = logpdf.mean() if aggregate else logpdf
         return -logpdf
 
-    model = nn_.AutoregressiveFlow(n_dims, N_COMPONENTS)
+    model = nn_.AutoregressiveFlow(n_dims, N_COMPONENTS, [30, 30, 30, 30, 30], 'log')
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
     trainloader = DataLoader(TensorDataset(train_data),
                              batch_size=BATCH_SIZE, shuffle=True)

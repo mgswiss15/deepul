@@ -28,7 +28,7 @@ def make_moons(n_samples=100, *, shuffle=True, noise=None, random_state=None):
         The integer labels (0 or 1) for class membership of each sample.
     """
 
-    if isinstance(n_samples, numbers.Integral):
+    if isinstance(n_samples, int):
         n_samples_out = n_samples // 2
         n_samples_in = n_samples - n_samples_out
     else:
@@ -38,7 +38,7 @@ def make_moons(n_samples=100, *, shuffle=True, noise=None, random_state=None):
             raise ValueError('`n_samples` can be either an int or '
                              'a two-element tuple.')
 
-    generator = check_random_state(random_state)
+    generator = np.random.RandomState(random_state)
 
     outer_circ_x = np.cos(np.linspace(0, np.pi, n_samples_out))
     outer_circ_y = np.sin(np.linspace(0, np.pi, n_samples_out))
@@ -51,7 +51,10 @@ def make_moons(n_samples=100, *, shuffle=True, noise=None, random_state=None):
                    np.ones(n_samples_in, dtype=np.intp)])
 
     if shuffle:
-        X, y = util_shuffle(X, y, random_state=generator)
+        idx = generator.permutation(X.shape[0])
+        X = X[idx, :]
+        y = y[idx]
+        # X, y = util_shuffle(X, y, random_state=generator)
 
     if noise is not None:
         X += generator.normal(scale=noise, size=X.shape)

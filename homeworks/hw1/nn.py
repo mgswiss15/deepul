@@ -11,7 +11,7 @@ class MaskedLinear(nn.Linear):
     """Masked linear layer for MADE."""
 
     def __init__(self, in_features, out_features, n_dims, bias=True, prev_mk=None):
-        super().__init__(in_features, out_features, bias)
+        super().__init__(in_features, out_features, bias=False)
         self.mk = torch.randint(prev_mk.min(), n_dims, (out_features, 1))
         mask = (self.mk >= prev_mk.T).squeeze()
         # make mask parameter so can be moved to correct device by model.to(device)
