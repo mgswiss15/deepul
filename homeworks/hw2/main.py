@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpu", action="store_true",
                     help="Training on gpu.")
 
-parser.add_argument("ex", type=str, choices=["q1_a"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b"],
                     help="Code of hw to do.")
 
 parser.add_argument("ds", type=int, choices=[1, 2],
@@ -58,6 +58,8 @@ print(f"Traning {args.ex}_{args.ds} with lr {args.lr} bs {args.bs} for {args.epo
 
 if args.ex == "q1_a":
     q1_save_results(args.ds, 'a', hw2.q1_a)
+elif args.ex == "q1_b":
+    q1_save_results(args.ds, 'b', hw2.q1_b)
 
 if not args.screen:
     sys.stdout = origout
