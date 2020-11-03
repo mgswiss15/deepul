@@ -3,9 +3,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from homeworks.hw1.utils import rescale, descale
+from homeworks.hw2.utils import jitter, bisection
 import math
-from homeworks.hw1.nn import MaskedLinear, MaskedLinearOutput
+from homeworks.hw1.nn import MaskedLinear, MaskedLinearOutput, PixelCNN, MaskedConv2dSingle
 
 
 class MaskedLinearInOut(nn.Linear):
@@ -156,6 +156,71 @@ class RealNVP(nn.Module):
             logjacobs = logjacobs + lj
         return data, logjacobs
 
+
+class PixelCNNConditioner(PixelCNN):
+    """PixelCNN conditioner for autoregressive flow with CDF transforms."""
+
+    def __init__(self, in_channels, n_filters, kernel_size, n_layers, n_components):
+        super().__init__(in_channels, n_filters, kernel_size, n_layers, colcats=2, n_classes=0)
+        self.layers = self.layers[:-1]
+        self.layers.append(MaskedConv2dSingle('B', n_filters, n_components, 1, self.n_classes))
+
+
+class PixelCNNFlow(nn.Module):
+    """Autoregressie flow."""
+
+    def __init__(self, in_channels, n_components, n_filters, kernel_size, n_layers, transformertype):
+        if (n_components % 3) != 0:
+            raise Exception(f"Invalid n_components {n_components}, has to be divisible by 3.")
+        super().__init__()
+        self.n_components = n_components
+        self.conditioner = PixelCNNConditioner(in_channels, n_filters, kernel_size, n_layers, n_components)
+        self.transformer = self.transformergauss
+
+    def forward(self, x):
+        params = self.conditioner(x)
+        return self.transformer(x, params)
+
+    def transformergauss(self, x, params):
+        h, w = x.shape[-2:]
+        params = params.view(-1, self.n_components // 3, 3, h, w)
+        pis = F.softmax(params[:, :, 0, :, :], dim=1)
+        locs = params[:, :, 1, :, :]
+        logscales = params[:, :, 2, :, :]
+        scales = logscales.exp()
+        cdfs = pis * (0.5 * (1 + torch.erf((x - locs) / (scales * 2**0.5))))
+        z = cdfs.sum(dim=1, keepdim=True)
+        logpdfs = -logscales - torch.tensor((math.pi*2)**0.5).log() - (x - locs)**2 / (2 * scales**2)
+        logjacobs = torch.logsumexp(logpdfs + pis.log(), dim=1, keepdim=True)
+        return z, logjacobs
+
+    def sample_data(self, n_samples, image_shape, device):
+        print('Sampling ...')
+        self.eval()
+        with torch.no_grad():
+            h, w = image_shape
+            samples = torch.bernoulli(torch.ones(n_samples, 1, h, w))
+            samples = jitter(samples, 2.).to(device)
+            for hi in range(h):
+                print(f'Row {hi} ...', flush=True)
+                for wi in range(w):
+                    params = self.conditioner(samples)[:, :, hi, wi]
+                    samples[:, 0, hi, wi] = self.invcdf(params)
+        return samples.permute(0, 2, 3, 1)
+
+    def invcdf(self, params):
+        n = params.shape[0]
+        params = params.view(-1, self.n_components // 3, 3)
+        pis = F.softmax(params[:, :, 0], dim=1)
+        locs = params[:, :, 1]
+        logscales = params[:, :, 2]
+        scales = logscales.exp()
+        z = torch.rand((n, 1)).to("cuda")
+        def cdfz(x):
+            cdfs = pis * (0.5 * (1 + torch.erf((x - locs) / (scales * 2**0.5))))
+            return cdfs.sum(dim=1, keepdim=True) - z
+        x = bisection(cdfz, n)
+        return x.squeeze()
 
 
 

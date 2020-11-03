@@ -70,6 +70,12 @@ def descale(x, min, max):
     return (x + 1.) * (max - min) / 2. + min
 
 
+def jitter(x, colcats):
+    """Jitter by uniform noise and rescale to 0, 1."""
+
+    return (x + torch.rand_like(x)) / colcats
+
+
 def reload_modelstate(model, optimizer, modelpath):
     """Reload mode state from checkpoint saved in modelpath."""
 
@@ -84,5 +90,19 @@ def reload_modelstate(model, optimizer, modelpath):
 def prep_data(data, colcats, dtype=torch.float):
     targets = torch.from_numpy(data).to(dtype)
     targets = targets.permute(0, 3, 1, 2)
-    data = rescale(targets, 0., colcats - 1.)
+    data = jitter(targets, colcats)
     return targets, data
+
+
+def bisection(func, n):
+    a = (torch.ones((n, 1))*(-10.)).to("cuda")
+    b = -a
+    while True:
+        m = (a + b) / 2.
+        mask = (func(m) * func(a)) < 0
+        b = mask * m + ~mask * b
+        a = ~mask * m + mask * a
+        if ((b-a) < 1e-5).all():
+            m = (a + b) / 2.
+            break
+    return m

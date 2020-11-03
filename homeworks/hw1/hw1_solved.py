@@ -298,7 +298,7 @@ def q3_a(train_data, test_data, image_shape, dset_id):
         loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
-    model = nn_.PixelCNN(in_channels=1, n_filters=64, kernel_size=7, n_layers=5, colcats=COLCATS).to(DEVICE)
+    model = nn_.PixelCNN(image_shape, in_channels=1, n_filters=64, kernel_size=7, n_layers=5, colcats=COLCATS).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():

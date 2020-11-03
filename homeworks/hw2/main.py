@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpu", action="store_true",
                     help="Training on gpu.")
 
-parser.add_argument("ex", type=str, choices=["q1_a", "q1_b"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2"],
                     help="Code of hw to do.")
 
 parser.add_argument("ds", type=int, choices=[1, 2],
@@ -45,7 +45,6 @@ hw2.LEARN_RATE = args.lr
 hw2.MAX_EPOCHS = 1 if args.short else args.epochs
 hw2.BATCH_SIZE = args.bs
 
-
 if not args.screen:
     origout = sys.stdout
     origerr = sys.stderr
@@ -60,6 +59,8 @@ if args.ex == "q1_a":
     q1_save_results(args.ds, 'a', hw2.q1_a)
 elif args.ex == "q1_b":
     q1_save_results(args.ds, 'b', hw2.q1_b)
+elif args.ex == "q2":
+    q2_save_results(hw2.q2)
 
 if not args.screen:
     sys.stdout = origout

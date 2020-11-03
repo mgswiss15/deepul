@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 from deepul.hw2_helper import resultsdir
 import homeworks.hw2.nn as nn_
-from homeworks.hw2.utils import Learner, rescale, reload_modelstate, prep_data
+from homeworks.hw2.utils import Learner, reload_modelstate, prep_data
 from pathlib import Path
 from deepul.utils import show_samples
 import torch.distributions as D
@@ -146,3 +146,73 @@ def q1_b(train_data, test_data, dset_id):
         z, _ = model(train_data)
 
     return np.array(losses_train), np.array(losses_test), probs.numpy(), z.numpy()
+
+
+def q2(train_data, test_data):
+    """
+    train_data: A (n_train, H, W, 1) uint8 numpy array of binary images with values in {0, 1}
+    test_data: A (n_test, H, W, 1) uint8 numpy array of binary images with values in {0, 1}
+    H = W = 20
+    Note that you should dequantize your train and test data, your dequantized pixels should all lie in [0,1]
+
+    Returns
+    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
+    - a numpy array of size (100, H, W, 1) of samples with values in [0, 1], where [0,0.5] represents a black pixel
+      and [0.5,1] represents a white pixel. We will show your samples with and without noise. 
+    """
+
+    # DEVICE is defined and assigned to this module in main
+    print(f"Training q2 on {DEVICE}.")
+
+    modelpath = f'{resultsdir}/q2_model.pickle'
+
+    COLCATS = 2
+
+    train_targets, train_data = prep_data(train_data, COLCATS)
+    test_targets, test_data = prep_data(test_data, COLCATS)
+
+    n_dims = 20*20
+
+    N_COMPONENTS = 10
+
+    def loss_func(z, logjacobs, aggregate=True):
+        """Flow loss func: NLL for uniform z."""
+        logpdf = logjacobs.sum(dim=(1, 2, 3))
+        logpdf = logpdf.mean() if aggregate else logpdf
+        return -logpdf
+
+    model = nn_.PixelCNNFlow(1, N_COMPONENTS * 3, 64, 7, 5, 'gauss').to(DEVICE)
+    # model = nn_.PixelCNNFlow(1, N_COMPONENTS * 3, 32, 7, 2, 'gauss')
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_data, train_targets),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data, test_targets),
+                                batch_size=BATCH_SIZE)
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples = model.sample_data(100, (20, 20), DEVICE).to("cpu")
+
+    return np.array(losses_train), np.array(losses_test), samples.numpy()
