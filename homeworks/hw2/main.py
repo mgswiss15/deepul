@@ -9,10 +9,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpu", action="store_true",
                     help="Training on gpu.")
 
-parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2", "q3_a", "q3_b"],
                     help="Code of hw to do.")
 
-parser.add_argument("ds", type=int, choices=[1, 2],
+parser.add_argument("--ds", type=int, choices=[1, 2],
                     help="Code of dataset to use.")
 
 parser.add_argument("--reload", action="store_true",
@@ -61,6 +61,10 @@ elif args.ex == "q1_b":
     q1_save_results(args.ds, 'b', hw2.q1_b)
 elif args.ex == "q2":
     q2_save_results(hw2.q2)
+elif args.ex == "q3_a":
+    q3_save_results(hw2.q3_a, 'a')
+elif args.ex == "q3_b":
+    q3_save_results(hw2.q3_b, 'b')
 
 if not args.screen:
     sys.stdout = origout

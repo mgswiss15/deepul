@@ -8,8 +8,8 @@ from deepul.hw2_helper import resultsdir
 import homeworks.hw2.nn as nn_
 from homeworks.hw2.utils import Learner, reload_modelstate, prep_data
 from pathlib import Path
-from deepul.utils import show_samples
 import torch.distributions as D
+from homeworks.hw2.realnvp import dequantize, RealNVP
 
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
@@ -172,7 +172,7 @@ def q2(train_data, test_data):
     train_targets, train_data = prep_data(train_data, COLCATS)
     test_targets, test_data = prep_data(test_data, COLCATS)
 
-    n_dims = 20*20
+    n_dims = 20*20*3
 
     N_COMPONENTS = 10
 
@@ -216,3 +216,92 @@ def q2(train_data, test_data):
     samples = model.sample_data(100, (20, 20), DEVICE).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy()
+
+
+def q3_a(train_data, test_data):
+    """
+    train_data: A (n_train, H, W, 3) uint8 numpy array of quantized images with values in {0, 1, 2, 3}
+    test_data: A (n_test, H, W, 3) uint8 numpy array of binary images with values in {0, 1, 2, 3}
+
+    Returns
+    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
+    - a numpy array of size (100, H, W, 3) of samples with values in [0, 1]
+    - a numpy array of size (30, H, W, 3) of interpolations with values in [0, 1].
+    """
+
+    # DEVICE is defined and assigned to this module in main
+    print(f"Training q3_a on {DEVICE}.")
+
+    modelpath = f'{resultsdir}/q3_a_model.pickle'
+
+    COLCATS = 4
+
+    train_data = dequantize(torch.from_numpy(train_data), COLCATS, forward=True)
+    test_data = dequantize(torch.from_numpy(test_data), COLCATS, forward=True)
+    train_data = train_data[:2000, ...]
+    train_data = train_data[:1000, ...]
+
+    img_shape = train_data.shape[-2:]
+    n_dims = img_shape[0] * img_shape[1] * 3
+
+    # z distribution
+    MN = D.MultivariateNormal(torch.zeros(n_dims), torch.eye(n_dims))
+
+    def loss_func(z, logjacobs, aggregate=True):
+        """Flow loss func: NLL for standard normal z."""
+        logpdf = MN.log_prob(z.view(-1, n_dims)) + logjacobs
+        logpdf = logpdf.mean() if aggregate else logpdf
+        return -logpdf
+
+    model = RealNVP(3, 32, 3, 2, img_shape).to(DEVICE)
+    # model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_data, torch.zeros(train_data.shape[0])),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data, torch.zeros(test_data.shape[0])),
+                                batch_size=BATCH_SIZE)
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples = model.sample_data(100, DEVICE).to("cpu")
+
+    def interpolations(n_rows):
+        print("Interpolations ...")
+        testidx = torch.randint(0, test_data.shape[0], (n_rows*2,))
+        imgs = torch.index_select(test_data, 0, testidx).to(DEVICE)
+        print('imgs.shape', imgs.shape)
+        model.eval()
+        with torch.no_grad():
+            zs, _ = model(imgs)
+            z1 = torch.repeat_interleave(zs[:n_rows, ...], 6, dim=0)
+            z2 = torch.repeat_interleave(zs[n_rows:, ...], 6, dim=0)
+            weights = torch.linspace(0., 1., 6, device=DEVICE).repeat(5)[:, None, None, None]
+            zs = weights * z1 + (1-weights) * z2
+            inter = model.reverse(zs)
+        return inter.permute(0, 2, 3, 1)
+
+    inter = interpolations(5)
+
+    return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()

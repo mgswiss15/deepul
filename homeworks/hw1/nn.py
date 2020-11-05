@@ -190,7 +190,12 @@ class MaskedConv2d(nn.Conv2d):
 
 
 class ResBlock(nn.Module):
-    """Residual block for PixelCNN."""
+    """Residual block for PixelCNN.
+
+    NOTE: The forward step here is strange.
+    Should not it first do the conv and then the relu?
+    I guess depends on what comes in.
+    """
 
     def __init__(self, in_channels, kernel_size, indepchannels=False):
         super().__init__()
