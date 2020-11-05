@@ -14,24 +14,20 @@ You can open the notebook in Google Colab to get access to a free GPU, or you ca
 
 ## Solutions
 
->> MG: 29/10/2020: Dropped devs in jupyter notebook.
-
 To run on home comp:
 ```python
 python -m homeworks.hw2.main [ex] [ds] --gpu
 ```
 where the flags are defined as
 ```python
-parser.add_argument("--gpu", action="store_true",
-                    help="Training on gpu.")
-
-parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2_a", "q2_b",
-                                             "q3_a", "q3_b", "q3_c", "q3_d",
-                                             "q4_a", "q4_b"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2", "q3_a", "q3_b"],
                     help="Code of hw to do.")
 
-parser.add_argument("ds", type=int, choices=[1, 2],
+parser.add_argument("--ds", type=int, choices=[1, 2],
                     help="Code of dataset to use.")
+
+parser.add_argument("--gpu", action="store_true",
+                    help="Training on gpu.")
 
 parser.add_argument("--reload", action="store_true",
                     help="Reload model from previously saved state.")
@@ -41,6 +37,9 @@ parser.add_argument("--notrain", action="store_true",
 
 parser.add_argument("--short", action="store_true",
                     help="Short training of one epoch only (otherwise use the default of each exercise).")
+
+parser.add_argument("--screen", action="store_true",
+                    help="Print stdout and stderr to screen (instead of log file in results folder).")
 
 parser.add_argument("--lr", type=float, default=0.001,
                     help="Learning rate for training.")

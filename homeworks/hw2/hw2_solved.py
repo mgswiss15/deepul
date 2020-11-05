@@ -254,8 +254,8 @@ def q3_a(train_data, test_data):
         logpdf = logpdf.mean() if aggregate else logpdf
         return -logpdf
 
-    model = RealNVP(3, 32, 3, 2, img_shape).to(DEVICE)
-    # model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
+    # model = RealNVP(3, 32, 3, 2, img_shape).to(DEVICE)
+    model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():

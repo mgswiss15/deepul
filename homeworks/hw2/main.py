@@ -6,14 +6,14 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--gpu", action="store_true",
-                    help="Training on gpu.")
-
 parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2", "q3_a", "q3_b"],
                     help="Code of hw to do.")
 
 parser.add_argument("--ds", type=int, choices=[1, 2],
                     help="Code of dataset to use.")
+
+parser.add_argument("--gpu", action="store_true",
+                    help="Training on gpu.")
 
 parser.add_argument("--reload", action="store_true",
                     help="Reload model from previously saved state.")
