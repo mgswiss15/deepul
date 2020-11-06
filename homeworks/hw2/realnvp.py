@@ -43,7 +43,7 @@ class AffineCoupling(nn.Module):
 
     def __init__(self, mask, conditioner, img_shape):
         super().__init__()
-        self.mask = mask
+        self.register_buffer('mask', mask)
         self.conditioner = conditioner
         self.scale = nn.Parameter(torch.ones(img_shape))
         self.shift = nn.Parameter(torch.ones(img_shape))
@@ -147,8 +147,8 @@ class RealNVP(nn.Module):
     def __init__(self, in_channels, n_filters, k_size, n_blocks, img_shape):
         super().__init__()
         self.img_shape = img_shape
-        self.register_checkermask(img_shape)
-        self.register_channelmask(in_channels * 4)
+        self.checkermask = self.get_checkermask(img_shape)
+        self.channelmask = self.get_channelmask(in_channels * 4)
         layers = []
         mask = self.checkermask[None, None, :, :]
         for _ in range(4):
@@ -187,16 +187,16 @@ class RealNVP(nn.Module):
             data = transform.reverse(data)
         return data
 
-    def register_checkermask(self, img_shape):
+    def get_checkermask(self, img_shape):
         h, w = img_shape
         mask = torch.tensor([[True, False], [False, True]])
         mask = mask.repeat(h // 2, w//2)
-        self.register_buffer('checkermask', mask)
+        return mask
 
-    def register_channelmask(self, n_channels):
+    def get_channelmask(self, n_channels):
         mask = torch.tensor([True, True, False, False])
         mask = mask.repeat(n_channels // 4)
-        self.register_buffer('channelmask', mask)
+        return mask
 
     def sample_data(self, n_samples, device):
         print(f"Sampling ...")

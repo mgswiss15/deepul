@@ -246,7 +246,7 @@ def q3_a(train_data, test_data):
     n_dims = img_shape[0] * img_shape[1] * 3
 
     # z distribution
-    MN = D.MultivariateNormal(torch.zeros(n_dims), torch.eye(n_dims))
+    MN = D.MultivariateNormal(torch.zeros(n_dims, device=DEVICE), torch.eye(n_dims, device=DEVICE))
 
     def loss_func(z, logjacobs, aggregate=True):
         """Flow loss func: NLL for standard normal z."""
@@ -302,6 +302,6 @@ def q3_a(train_data, test_data):
             inter = model.reverse(zs)
         return inter.permute(0, 2, 3, 1)
 
-    inter = interpolations(5)
+    inter = interpolations(5).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()
