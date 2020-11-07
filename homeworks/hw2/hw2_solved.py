@@ -10,7 +10,7 @@ from homeworks.hw2.utils import Learner, reload_modelstate, prep_data
 from pathlib import Path
 import torch.distributions as D
 from homeworks.hw2.realnvp import dequantize, RealNVP
-import math
+from homeworks.hw2.callbacks import CombinedScheduler
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
 DEVICE = torch.device("cpu")
@@ -239,8 +239,8 @@ def q3_a(train_data, test_data):
 
     train_data = dequantize(torch.from_numpy(train_data), COLCATS, forward=True)
     test_data = dequantize(torch.from_numpy(test_data), COLCATS, forward=True)
-    # train_data[:2000, ...]
-    # test_data[:1000, ...]
+    train_data[:100, :, :4, :4]
+    test_data[:50, :, :4, :4]
 
     img_shape = train_data.shape[-2:]
     n_dims = img_shape[0] * img_shape[1] * 3
@@ -254,12 +254,9 @@ def q3_a(train_data, test_data):
         logpdf = logpdf.mean() if aggregate else logpdf
         return -logpdf
 
-    # model = RealNVP(3, 32, 3, 2, img_shape).to(DEVICE)
-    model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
+    model = RealNVP(3, 8, 3, 2, img_shape).to(DEVICE)
+    # model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
-    # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=LEARN_RATE, max_lr=1e-4,
-    #                                           step_size_up=10, step_size_down=10)
-    scheduler = None
 
     if RELOAD and Path(modelpath).exists():
         model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
@@ -271,7 +268,9 @@ def q3_a(train_data, test_data):
                                  batch_size=BATCH_SIZE, shuffle=True)
         testloader = DataLoader(TensorDataset(test_data, torch.zeros(test_data.shape[0])),
                                 batch_size=BATCH_SIZE)
-        learner = Learner(model, optimizer, scheduler, trainloader, testloader, loss_func, DEVICE)
+
+        callback_list = [CombinedScheduler('lr', ['cosine_sched', 'cosine_sched'], 0.2, 1e-6, 1e-3, 1e-6)]
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, callback_list)
         l_train, l_test = learner.fit(MAX_EPOCHS)
         losses_train.extend(l_train)
         losses_test.extend(l_test)
@@ -305,5 +304,7 @@ def q3_a(train_data, test_data):
         return inter.permute(0, 2, 3, 1)
 
     inter = interpolations(5).to("cpu")
+
+    print('schedule', learner.schedule['lr'])
 
     return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()

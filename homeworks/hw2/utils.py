@@ -6,34 +6,39 @@ import torch
 class Learner():
     """Class for model training."""
 
-    def __init__(self, model, optimizer, scheduler, trainloader, testloader, loss_func, device, clip_grads=False):
+    def __init__(self, model, optimizer, trainloader, testloader, loss_func, device, callback_list=[], clip_grads=False):
         self.model = model
         self.optimizer = optimizer
-        self.scheduler = scheduler
         self.trainloader = trainloader
         self.testloader = testloader
         self.loss_func = loss_func
         self.device = device
         self.clip_grads = clip_grads
+        self.callback_list = callback_list
+        for cb in self.callback_list:
+            cb.init_learner(self)
 
     def fit(self, epochs):
+        self.epochs = epochs
+        self.callback('fit_begin')
         losses_train = []
         losses_test = self.eval_epoch()
-        for epoch in range(epochs):
-            print(f"Training epoch {epoch} ...", flush=True)
+        for self.epoch in range(epochs):
+            self.callback('epoch_begin')
+            print(f"Training epoch {self.epoch} ...", flush=True)
             losses = self.train_epoch()
             losses_train.extend(losses)
             losses = self.eval_epoch()
             losses_test.extend(losses)
             print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
-            # if not isinstance(self.scheduler, torch.optim.lr_scheduler.CyclicLR):
-            #     self.scheduler.step()
         return losses_train, losses_test
 
     def train_epoch(self):
+        self.callback('train_epoch_begin')
         losses = []
         self.model.train()
         for batch in self.trainloader:
+            self.callback('train_batch_begin')
             batch = [b.to(self.device) for b in batch]
             self.optimizer.zero_grad()
             out = self.model(batch[0])
@@ -42,8 +47,6 @@ class Learner():
             if self.clip_grads:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
             self.optimizer.step()
-            # if isinstance(self.scheduler, torch.optim.lr_scheduler.CyclicLR):
-            #     self.scheduler.step()
             losses.append(loss.item())
         return losses
 
@@ -61,6 +64,12 @@ class Learner():
                 n_samples += batch_size
             losses.append(loss / n_samples)
         return losses
+
+    def callback(self, cb_name, *args, **kwargs):
+        for cb in self.callback_list:
+            cb_method = getattr(cb, cb_name, None)
+            if cb_method:
+                cb_method(*args, **kwargs)
 
 
 def rescale(x, min, max):
