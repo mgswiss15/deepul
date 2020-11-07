@@ -9,7 +9,7 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
     """Logit gequantization from 4.1 of RealNVP."""
 
     if forward:
-        x = x + torch.rand_like(x.float())
+        x = x.float()
         x = alpha + (1.-alpha) * (x/colcats)
         x = x.log() - (1-x).log()
         return x.permute(0, 3, 1, 2)
@@ -131,13 +131,20 @@ class Unsqueeze(nn.Module):
 class ActNorm(nn.Module):
     """ActNorm as in Glow paper."""
 
-    def __init__(self):
+    def __init__(self, n_filters, img_shape):
         super().__init__()
+        self.n_filters = n_filters
+        self.img_shape = img_shape
+        self.logscale = nn.Parameter(torch.zeros(n_filters))
+        self.shift = nn.Parameter(torch.zeros(n_filters))
 
     def forward(self, x):
-        return x, 0.
+        x = self.logscale[None, :, None, None].exp() * x + self.shift[None, :, None, None]
+        logjacobs = self.img_shape[0]*self.img_shape[1]*self.logscale.sum(dim=0, keepdim=True)
+        return x, logjacobs[None, :]
 
     def reverse(self, z):
+        z = (z - self.shift[None, :, None, None]) / torch.clamp(self.logscale.exp(), 1e-8)[None, :, None, None]
         return z
 
 
@@ -155,21 +162,21 @@ class RealNVP(nn.Module):
             conditioner = SimpleResnet(in_channels, n_filters, k_size, n_blocks, in_channels * 2)
             layers.append(AffineCoupling(mask, conditioner, img_shape))
             mask = ~mask
-            layers.append(ActNorm())
+            layers.append(ActNorm(in_channels, img_shape))
         layers.append(Squeeze())
         mask = self.channelmask[None, :, None, None]
         for _ in range(3):
             conditioner = SimpleResnet(in_channels * 4, n_filters, k_size, n_blocks, in_channels * 4 * 2)
             layers.append(AffineCoupling(mask, conditioner, (img_shape[0] // 2, img_shape[1] // 2)))
             mask = ~mask
-            layers.append(ActNorm())
+            layers.append(ActNorm(in_channels * 4, img_shape))
         layers.append(Unsqueeze())
         mask = self.checkermask[None, None, :, :]
         for _ in range(3):
             conditioner = SimpleResnet(in_channels, n_filters, k_size, n_blocks, in_channels * 2)
             layers.append(AffineCoupling(mask, conditioner, img_shape))
             mask = ~mask
-            layers.append(ActNorm())
+            layers.append(ActNorm(in_channels, img_shape))
         self.transforms = nn.ModuleList(layers)
 
     def forward(self, data):

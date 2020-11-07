@@ -6,9 +6,10 @@ import torch
 class Learner():
     """Class for model training."""
 
-    def __init__(self, model, optimizer, trainloader, testloader, loss_func, device, clip_grads=False):
+    def __init__(self, model, optimizer, scheduler, trainloader, testloader, loss_func, device, clip_grads=False):
         self.model = model
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.trainloader = trainloader
         self.testloader = testloader
         self.loss_func = loss_func
@@ -25,6 +26,8 @@ class Learner():
             losses = self.eval_epoch()
             losses_test.extend(losses)
             print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
+            # if not isinstance(self.scheduler, torch.optim.lr_scheduler.CyclicLR):
+            #     self.scheduler.step()
         return losses_train, losses_test
 
     def train_epoch(self):
@@ -39,6 +42,8 @@ class Learner():
             if self.clip_grads:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
             self.optimizer.step()
+            # if isinstance(self.scheduler, torch.optim.lr_scheduler.CyclicLR):
+            #     self.scheduler.step()
             losses.append(loss.item())
         return losses
 
