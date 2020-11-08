@@ -1,6 +1,9 @@
 """Utility functions for hw2."""
 
 import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from deepul.utils import savefig
 
 
 class Learner():
@@ -31,6 +34,7 @@ class Learner():
             losses = self.eval_epoch()
             losses_test.extend(losses)
             print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
+        self.callback('fit_end')
         return losses_train, losses_test
 
     def train_epoch(self):
@@ -120,3 +124,15 @@ def bisection(func, n):
             m = (a + b) / 2.
             break
     return m
+
+
+def save_lr_plot(lr, epochs, fname):
+    plt.figure()
+    x = np.linspace(0, epochs, len(lr))
+
+    plt.plot(x, lr, label='learning rate')
+    plt.legend()
+    plt.title("Learning rate schedule")
+    plt.xlabel('Epoch')
+    plt.ylabel('lr')
+    savefig(fname)

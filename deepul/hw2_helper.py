@@ -1,6 +1,6 @@
 from .utils import *
 
-resultsdir = '../hw2/results'
+resultsdir = '../hw2/results2'
 
 
 def make_moons(n_samples=100, *, shuffle=True, noise=None, random_state=None):

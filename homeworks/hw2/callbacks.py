@@ -1,6 +1,9 @@
 """Callbacks inspired by fastai."""
 
 import math
+import homeworks.hw2.realnvp as rnvp
+import homeworks.hw2.hooks as hookslib
+import torch
 
 
 class Callback():
@@ -89,3 +92,57 @@ class CombinedScheduler(Callback):
                 pg[self.param_name] = self.p2.sched_func(position, self.mid, self.end)
         self.learner.schedule[self.param_name].append(pg[self.param_name])
         self.iter += 1.
+
+
+class InitActNorm(Callback):
+    """Callback for initialising ActNorm parameters."""
+
+    def __init__(self, batch_size, device):
+        self.batch_size = batch_size
+        self.device = device
+        self.hooks = []
+
+    def fit_begin(self, *args, **kwargs):
+        dataset = self.learner.trainloader.dataset
+        model = self.learner.model
+        for layer in model.modules():
+            if isinstance(layer, rnvp.ActNorm):
+                self.hooks.append(hookslib.ChannelOutputsHook(layer))
+
+        batch = dataset.tensors[0][:self.batch_size].to(self.device)
+        for i in range(100):
+            model(batch)
+            layers_done = []
+            for layer in model.modules():
+                if isinstance(layer, rnvp.ActNorm):
+                    layers_done.append(True)
+                    if (abs(layer.output_stats['means']) > 1e-3).all():
+                        layer.shift.data = layer.shift.data - layer.output_stats['means']
+                        layers_done[-1] = False
+                    if (abs(layer.output_stats['stds'] - 1.) > 1e-3).all():
+                        layer.logscale.data = layer.logscale.data - layer.output_stats['stds'].log()
+                        layers_done[-1] = False
+            if all(layers_done):
+                print(f"All ActNorm layers initialised.")
+                break
+
+        while len(self.hooks) > 0:
+            hook = self.hooks.pop()
+            hook.remove()
+
+
+class HooksCallback(Callback):
+    """General callback for placing hooks."""
+
+    def __init__(self, hookname):
+        self.hookname = hookname
+
+    def fit_begin(self):
+        self.hooks_forward = [self.hookname(x) for x in self.learner.model.children()]
+        self.hooks_backward = [self.hookname(x) for x in self.learner.model.children()]
+
+    def fit_end(self):
+        for hook in self.hooks_forward:
+            hook.remove()
+        for hook in self.hooks_backward:
+            hook.remove()
