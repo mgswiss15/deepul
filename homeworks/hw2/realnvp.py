@@ -144,7 +144,7 @@ class ActNorm(nn.Module):
         return x, logjacobs[None, :]
 
     def reverse(self, z):
-        z = (z - self.shift[None, :, None, None]) / torch.clamp(self.logscale.exp(), 1e-8)[None, :, None, None]
+        z = (z - self.shift[None, :, None, None]) * (-self.logscale).exp()[None, :, None, None]
         return z
 
 

@@ -269,7 +269,8 @@ def q3_a(train_data, test_data):
         testloader = DataLoader(TensorDataset(test_data, torch.zeros(test_data.shape[0])),
                                 batch_size=BATCH_SIZE)
 
-        callback_list = [cb.CombinedScheduler('lr', ['cosine_sched', 'cosine_sched'], 0.2, LEARN_RATE, LEARN_RATE*100, LEARN_RATE),
+        callback_list = [cb.CombinedScheduler('lr', ['cosine_sched', 'cosine_sched'],
+                                              0.2, LEARN_RATE, LEARN_RATE*100, LEARN_RATE),
                          cb.InitActNorm(BATCH_SIZE, DEVICE)]
 
         learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, callback_list)

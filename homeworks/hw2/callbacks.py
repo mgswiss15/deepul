@@ -3,7 +3,6 @@
 import math
 import homeworks.hw2.realnvp as rnvp
 import homeworks.hw2.hooks as hookslib
-import torch
 
 
 class Callback():
