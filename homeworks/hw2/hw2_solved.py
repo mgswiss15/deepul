@@ -284,13 +284,15 @@ def q3_a(train_data, test_data):
                     'losses_test': losses_test},
                    modelpath)
         print(f"Saved model to {modelpath}.")
+        save_lr_plot(learner.schedule['lr'], MAX_EPOCHS, f'{resultsdir}/q3_a_lrschedule.png')
     else:
         print(f"No training, only generating data from last available model.")
 
     losses_train = [x / n_dims for x in losses_train]
     losses_test = [x / n_dims for x in losses_test]
 
-    samples = model.sample_data(100, DEVICE).to("cpu")
+    samples = model.sample_data(100, DEVICE)
+    samples = dequantize(samples, COLCATS, forward=False).to("cpu")
 
     def interpolations(n_rows):
         print("Interpolations ...")
@@ -304,10 +306,103 @@ def q3_a(train_data, test_data):
             weights = torch.linspace(0., 1., 6, device=DEVICE).repeat(5)[:, None, None, None]
             zs = weights * z1 + (1-weights) * z2
             inter = model.reverse(zs)
-        return inter.permute(0, 2, 3, 1)
+        return dequantize(inter, COLCATS, forward=False)
 
     inter = interpolations(5).to("cpu")
 
-    save_lr_plot(learner.schedule['lr'], MAX_EPOCHS, f'{resultsdir}/q3_a_lrschedule.png')
+    return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()
+
+
+def q3_b(train_data, test_data):
+    """
+    train_data: A (n_train, H, W, 3) uint8 numpy array of quantized images with values in {0, 1, 2, 3}
+    test_data: A (n_test, H, W, 3) uint8 numpy array of binary images with values in {0, 1, 2, 3}
+
+    Returns
+    - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
+    - a numpy array of size (100, H, W, 3) of samples with values in [0, 1]
+    - a numpy array of size (30, H, W, 3) of interpolations with values in [0, 1].
+    """
+
+     # DEVICE is defined and assigned to this module in main
+    print(f"Training q3_b on {DEVICE}.")
+
+    modelpath = f'{resultsdir}/q3_b_model.pickle'
+
+    COLCATS = 4
+
+    train_data = dequantize(torch.from_numpy(train_data), COLCATS, forward=True)
+    test_data = dequantize(torch.from_numpy(test_data), COLCATS, forward=True)
+    train_data = train_data[:100, ...]
+    test_data = test_data[:50, ...]
+
+    img_shape = train_data.shape[-2:]
+    n_dims = img_shape[0] * img_shape[1] * 3
+
+    # z distribution
+    MN = D.MultivariateNormal(torch.zeros(n_dims, device=DEVICE), torch.eye(n_dims, device=DEVICE))
+
+    def loss_func(z, logjacobs, aggregate=True):
+        """Flow loss func: NLL for standard normal z."""
+        logpdf = MN.log_prob(z.view(-1, n_dims)) + logjacobs
+        logpdf = logpdf.mean() if aggregate else logpdf
+        return -logpdf
+
+    model = RealNVP(3, 8, 3, 2, img_shape, badmasks=True).to(DEVICE)
+    # model = RealNVP(3, 128, 3, 8, img_shape, badmasks=True).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        trainloader = DataLoader(TensorDataset(train_data, torch.zeros(train_data.shape[0])),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data, torch.zeros(test_data.shape[0])),
+                                batch_size=BATCH_SIZE)
+
+        callback_list = [cb.CombinedScheduler('lr', ['cosine_sched', 'cosine_sched'],
+                                              0.2, LEARN_RATE, LEARN_RATE*100, LEARN_RATE),
+                         cb.InitActNorm(BATCH_SIZE, DEVICE)]
+
+        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, callback_list)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+        save_lr_plot(learner.schedule['lr'], MAX_EPOCHS, f'{resultsdir}/q3_b_lrschedule.png')
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    losses_train = [x / n_dims for x in losses_train]
+    losses_test = [x / n_dims for x in losses_test]
+
+    samples = model.sample_data(100, DEVICE)
+    samples = dequantize(samples, COLCATS, forward=False).to("cpu")
+
+    def interpolations(n_rows):
+        print("Interpolations ...")
+        testidx = torch.randint(0, test_data.shape[0], (n_rows*2,))
+        imgs = torch.index_select(test_data, 0, testidx).to(DEVICE)
+        model.eval()
+        with torch.no_grad():
+            zs, _ = model(imgs)
+            z1 = torch.repeat_interleave(zs[:n_rows, ...], 6, dim=0)
+            z2 = torch.repeat_interleave(zs[n_rows:, ...], 6, dim=0)
+            weights = torch.linspace(0., 1., 6, device=DEVICE).repeat(5)[:, None, None, None]
+            zs = weights * z1 + (1-weights) * z2
+            inter = model.reverse(zs)
+        return dequantize(inter, COLCATS, forward=False)
+
+    inter = interpolations(5).to("cpu")
 
     return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()

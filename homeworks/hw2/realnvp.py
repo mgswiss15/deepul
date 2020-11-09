@@ -10,6 +10,7 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
 
     if forward:
         x = x.float()
+        x = x + torch.rand_like(x)
         x = alpha + (1.-alpha) * (x/colcats)
         x = x.log() - (1-x).log()
         return x.permute(0, 3, 1, 2)
@@ -211,4 +212,4 @@ class RealNVP(nn.Module):
         with torch.no_grad():
             z = torch.randn(n_samples, 3, *self.img_shape).to(device)
             samples = self.reverse(z)
-        return samples.permute(0, 2, 3, 1)
+        return samples
