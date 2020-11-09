@@ -16,7 +16,7 @@ You can open the notebook in Google Colab to get access to a free GPU, or you ca
 
 To run on home comp:
 ```python
-python -m homeworks.hw2.main [ex] [ds] --gpu
+python -m homeworks.hw2.main [ex] --flags
 ```
 where the flags are defined as
 ```python

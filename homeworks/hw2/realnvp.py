@@ -3,20 +3,28 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from homeworks.hw2.utils import rescale, descale
 
 
 def dequantize(x, colcats, alpha=0.05, forward=True):
     """Logit gequantization from 4.1 of RealNVP."""
 
+    def logit(z):
+        return z.log() - (1 - z).log()
+
+    minx = logit(torch.tensor([alpha, ]))
+    maxx = logit(torch.tensor([1 - alpha, ]))
     if forward:
         x = x.float()
         x = x + torch.rand_like(x)
-        x = alpha + (1.-alpha) * (x/colcats)
-        x = x.log() - (1-x).log()
+        x = alpha + (1.- 2*alpha) * (x/colcats)
+        x = logit(x)
+        x = rescale(x, minx, maxx)
         return x.permute(0, 3, 1, 2)
     else:
+        x = descale(x, minx, maxx)
         x = torch.sigmoid(x)
-        x = (x-alpha)/(1-alpha)*colcats
+        x = (x-alpha)/(1-alpha)
         return x.permute(0, 2, 3, 1)
 
 
