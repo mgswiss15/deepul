@@ -79,7 +79,12 @@ class Learner():
 def rescale(x, min, max):
     """Rescale x to [-1, 1]."""
 
-    return 2. * (x - min) / (max - min) - 1.
+    n, h, w, c = x.shape
+    n_dims = h*w*c
+
+    out = 2. * (x - min) / (max - min) - 1.
+    logjabobs = 2. / (max - min) * n_dims
+    return out, logjabobs
 
 
 def descale(x, min, max):

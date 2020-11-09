@@ -237,8 +237,8 @@ def q3_a(train_data, test_data):
 
     COLCATS = 4
 
-    train_data = dequantize(torch.from_numpy(train_data), COLCATS, forward=True)
-    test_data = dequantize(torch.from_numpy(test_data), COLCATS, forward=True)
+    train_data, ljd_train = dequantize(torch.from_numpy(train_data), COLCATS, forward=True)
+    test_data, ljd_test = dequantize(torch.from_numpy(test_data), COLCATS, forward=True)
     # train_data = train_data[:100, ...]
     # test_data = test_data[:50, ...]
 
@@ -288,11 +288,11 @@ def q3_a(train_data, test_data):
     else:
         print(f"No training, only generating data from last available model.")
 
-    losses_train = [x / n_dims for x in losses_train]
-    losses_test = [x / n_dims for x in losses_test]
+    losses_train = [(x - ljd_train) / n_dims for x in losses_train]
+    losses_test = [(x - ljd_test) / n_dims for x in losses_test]
 
-    samples = model.sample_data(100, DEVICE)
-    samples = dequantize(samples, COLCATS, forward=False).to("cpu")
+    samples = model.sample_data(100, DEVICE).to("cpu")
+    samples = dequantize(samples, COLCATS, forward=False)
 
     def interpolations(n_rows):
         print("Interpolations ...")
@@ -306,9 +306,9 @@ def q3_a(train_data, test_data):
             weights = torch.linspace(0., 1., 6, device=DEVICE).repeat(5)[:, None, None, None]
             zs = weights * z1 + (1-weights) * z2
             inter = model.reverse(zs)
-        return dequantize(inter, COLCATS, forward=False)
+        return dequantize(inter.to("cpu"), COLCATS, forward=False)
 
-    inter = interpolations(5).to("cpu")
+    inter = interpolations(5)
 
     return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()
 
@@ -401,8 +401,8 @@ def q3_b(train_data, test_data):
             weights = torch.linspace(0., 1., 6, device=DEVICE).repeat(5)[:, None, None, None]
             zs = weights * z1 + (1-weights) * z2
             inter = model.reverse(zs)
-        return dequantize(inter, COLCATS, forward=False)
+        return dequantize(inter.to("cpu"), COLCATS, forward=False)
 
-    inter = interpolations(5).to("cpu")
+    inter = interpolations(5)
 
     return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()

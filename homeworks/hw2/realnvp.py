@@ -3,24 +3,33 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from homeworks.hw2.utils import rescale, descale
+from homeworks.hw2.utils import rescale, descale, jitter
 
 
 def dequantize(x, colcats, alpha=0.05, forward=True):
     """Logit gequantization from 4.1 of RealNVP."""
 
-    def logit(z):
-        return z.log() - (1 - z).log()
+    n, h, w, c = x.shape
+    n_dims = h*w*c
 
-    minx = logit(torch.tensor([alpha, ]))
-    maxx = logit(torch.tensor([1 - alpha, ]))
+    def logit(z):
+        n = z.shape[0]
+        out = z.log() - (1 - z).log()
+        logjacobs = (1/z + 1/(1-z)).view(n, -1).sum(dim=1)
+        return out, logjacobs
+
+    minx, _ = logit(torch.tensor([alpha, ]))
+    maxx, _ = logit(torch.tensor([1 - alpha, ]))
     if forward:
         x = x.float()
-        x = x + torch.rand_like(x)
-        x = alpha + (1.- 2*alpha) * (x/colcats)
-        x = logit(x)
-        x = rescale(x, minx, maxx)
-        return x.permute(0, 3, 1, 2)
+        x = jitter(x, colcats)
+        x = alpha + (1. - 2*alpha) * x
+        logjacobs = torch.tensor([- 2*alpha*n_dims, ])
+        x, ljd = logit(x)
+        logjacobs += ljd.mean()
+        x, ljd = rescale(x, minx, maxx)
+        logjacobs += ljd
+        return x.permute(0, 3, 1, 2), logjacobs
     else:
         x = descale(x, minx, maxx)
         x = torch.sigmoid(x)
