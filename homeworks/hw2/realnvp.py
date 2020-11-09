@@ -29,7 +29,7 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
         logjacobs += ljd.mean()
         x, ljd = rescale(x, minx, maxx)
         logjacobs += ljd
-        return x.permute(0, 3, 1, 2), logjacobs
+        return x.permute(0, 3, 1, 2).contiguous(), logjacobs
     else:
         x = descale(x, minx, maxx)
         x = torch.sigmoid(x)
@@ -159,7 +159,7 @@ class ActNorm(nn.Module):
     def forward(self, x):
         x = self.logscale[None, :, None, None].exp() * x + self.shift[None, :, None, None]
         logjacobs = self.img_shape[0]*self.img_shape[1]*self.logscale.sum(dim=0, keepdim=True)
-        return x, logjacobs[None, :]
+        return x, logjacobs[None, :].expand(x.shape[0], -1)
 
     def reverse(self, z):
         z = (z - self.shift[None, :, None, None]) * (-self.logscale).exp()[None, :, None, None]
@@ -199,7 +199,7 @@ class RealNVP(nn.Module):
 
     def forward(self, data):
         logjacobs = 0
-        for transform in self.transforms:
+        for tidx, transform in enumerate(self.transforms):
             if isinstance(transform, Squeeze) or isinstance(transform, Unsqueeze):
                 data = transform(data)
             else:
