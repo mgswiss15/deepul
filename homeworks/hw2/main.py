@@ -30,6 +30,9 @@ parser.add_argument("--screen", action="store_true",
 parser.add_argument("--lr", type=float, default=0.001,
                     help="Learning rate for training.")
 
+parser.add_argument("--lrmax", type=float, default=0.001,
+                    help="Max learning rate for training.")
+
 parser.add_argument("--epochs", type=int, default=15,
                     help="Max number of epochs.")
 
@@ -42,6 +45,7 @@ hw2.DEVICE = torch.device("cuda" if args.gpu and torch.cuda.is_available() else 
 hw2.RELOAD = True if args.reload else False
 hw2.TRAIN = False if args.notrain else True
 hw2.LEARN_RATE = args.lr
+hw2.MAXLEARN_RATE = args.lrmax
 hw2.MAX_EPOCHS = 1 if args.short else args.epochs
 hw2.BATCH_SIZE = args.bs
 

@@ -17,6 +17,7 @@ DEVICE = torch.device("cpu")
 RELOAD = False
 TRAIN = True
 LEARN_RATE = 0.001
+MAXLEARN_RATE = LEARN_RATE*100
 MAX_EPOCHS = 10
 BATCH_SIZE = 128
 
@@ -271,7 +272,7 @@ def q3_a(train_data, test_data):
                                 batch_size=BATCH_SIZE)
 
         callback_list = [cb.CombinedScheduler('lr', ['cosine_sched', 'cosine_sched'],
-                                              0.2, LEARN_RATE, LEARN_RATE*100, LEARN_RATE),
+                                              0.2, LEARN_RATE, MAXLEARN_RATE, LEARN_RATE),
                          cb.InitActNorm(BATCH_SIZE, DEVICE)]
 
         learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, callback_list)
