@@ -18,8 +18,8 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         params = self.sequential(x)
-        location, logscale = torch.chunk(params, 2, dim=1)
-        return location, logscale
+        mu, logstd = torch.chunk(params, 2, dim=1)
+        return mu, logstd
 
 
 class Decoder(nn.Module):
@@ -36,8 +36,8 @@ class Decoder(nn.Module):
 
     def forward(self, z):
         params = self.sequential(z)
-        location, logscale = torch.chunk(params, 2, dim=1)
-        return location, logscale
+        mu, logstd = torch.chunk(params, 2, dim=1)
+        return mu, logstd
 
 
 class Reparametrization(nn.Module):
@@ -46,9 +46,9 @@ class Reparametrization(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, location, scale):
-        epsilon = torch.randn_like(location)
-        z = epsilon * scale + location
+    def forward(self, mu, scale):
+        epsilon = torch.randn_like(mu)
+        z = epsilon * scale + mu
         return z
 
 
@@ -64,13 +64,15 @@ class VAE(nn.Module):
         self.decoder = Decoder(x_dim, z_dim, hiddenE)
 
     def forward(self, x):
-        zlocation, zlogscale = self.encoder(x)
-        zsample = self.reparam(zlocation, zlogscale.exp())
-        xlocation, xlogscale = self.decoder(zsample)
-        return xlocation, xlogscale, zlocation, zlogscale
+        mu_z, logstd_z = self.encoder(x)
+        zsample = self.reparam(mu_z, logstd_z.exp())
+        mu_x, logstd_x = self.decoder(zsample)
+        return mu_x, logstd_x, mu_z, logstd_z
 
     def sample(self, n_samples, device):
-        zsample = torch.randn((n_samples, self.z_dim), device=device)
-        xlocation, xlogscale = self.decoder(zsample)
-        return xlocation, xlogscale
+        self.eval()
+        with torch.no_grad():
+            zsample = torch.randn((n_samples, self.z_dim), device=device)
+            mu_x, logstd_x = self.decoder(zsample)
+            return mu_x, logstd_x
 

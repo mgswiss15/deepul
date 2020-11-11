@@ -6,7 +6,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("ex", type=str, choices=["q1_a"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b"],
                     help="Code of hw to do.")
 
 parser.add_argument("--ds", type=int, choices=[1, 2],
@@ -39,6 +39,9 @@ parser.add_argument("--epochs", type=int, default=15,
 parser.add_argument("--bs", type=int, default=128,
                     help="Batch size.")
 
+parser.add_argument("--seed", type=float, default=1.,
+                    help="Seed for random sampling.")
+
 args = parser.parse_args()
 
 hw.DEVICE = torch.device("cuda" if args.gpu and torch.cuda.is_available() else "cpu")
@@ -57,10 +60,13 @@ if not args.screen:
     logfile = open(logpath, 'w')
     sys.stdout = sys.err = logfile
 
-print(f"Traning {args.ex}_{args.ds} with lr {args.lr} bs {args.bs} for {args.epochs} epochs.")
+print(f"Traning {args.ex}_{args.ds} with lr {args.lr} bs {args.bs} for {args.epochs} epochs, random seed {args.seed}.")
 
+# torch.random.manual_seed(args.seed)
 if args.ex == "q1_a":
     q1_save_results('a', args.ds, hw.q1)
+elif args.ex == "q1_b":
+    q1_save_results('b', args.ds, hw.q1)
 
 if not args.screen:
     sys.stdout = origout

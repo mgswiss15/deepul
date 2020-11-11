@@ -5,12 +5,14 @@ import torch.optim as optim
 import numpy as np
 import math
 from torch.utils.data import TensorDataset, DataLoader
-from deepul.hw3_helper import resultsdir
+from deepul.hw3_helper import resultsdir, save_scatter_2d
 from homeworks.hw3.utils import Learner, reload_modelstate, save_lr_plot, rescale, descale
 from pathlib import Path
 import torch.distributions as D
 import homeworks.hw3.callbacks as cb
 from homeworks.hw3.nn import VAE
+from collections import defaultdict
+from homeworks.hw3.theirs import *
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
 DEVICE = torch.device("cpu")
@@ -43,9 +45,6 @@ def q1(train_data, test_data, part, dset_id):
     - a numpy array of size (1000, 2) of 1000 samples WITHOUT decoder noise, i.e. sample z ~ p(z), x = mu(z)
     """
 
-    # DEVICE is defined and assigned to this module in main
-    print(f"Training q1_a on {DEVICE}.")
-
     modelpath = f'{resultsdir}/q1_a_model.pickle'
 
     train_data = torch.from_numpy(train_data)
@@ -53,33 +52,36 @@ def q1(train_data, test_data, part, dset_id):
     xmax, _ = train_data.max(dim=0)
     train_data = rescale(train_data, xmin, xmax)
     test_data = rescale(torch.from_numpy(test_data), xmin, xmax)
+    save_scatter_2d(train_data, title='Train data',
+                    fname=f'{resultsdir}/q1_a_dset{dset_id}_traindata.png')
 
     x_dim = train_data.shape[1]
     Z_DIM = 2
 
-    def loss_func(data, xlocation, xlogscale, zlocation, zlogscale):
+    def loss_func(data, mu_x, logstd_x, mu_z, logstd_z):
         """ELBO loss."""
-        xdist = D.Normal(xlocation.reshape(-1), xlogscale.reshape(-1).exp())
-        n = data.shape[0]
-        # xcov = (2*xlogscale).exp()
-        # rec_loss = 0.5*x_dim*math.log(2*math.pi)
-        # rec_loss += xlogscale.sum(dim=1)
-        # rec_loss += 0.5 * ((data-xlocation)**2 * xcov).sum(dim=1)
-        # rec_loss = rec_loss.mean()
-        rec = xdist.log_prob(data.view(-1)).sum() / n
-        kl = 0.5 * (-2*zlogscale - 1 + (2*zlogscale).exp() + zlocation**2).sum(dim=1).mean()
+        # logstd_x = torch.ones_like(logstd_x)*-0.
+        # dist_x0 = D.Normal(mu_x[:, 0], logstd_x[:, 0].exp())
+        # dist_x1 = D.Normal(mu_x[:, 1], logstd_x[:, 1].exp())
+        # rec = -(dist_x0.log_prob(data[:, 0]) + dist_x1.log_prob(data[:, 1])).mean()
+        rec = 0.5 * np.log(2 * np.pi) + logstd_x + (data - mu_x)**2 * torch.exp(-2 * logstd_x) * 0.5
+        rec = rec.sum(1).mean()
+        # kl = (-logstd_z - 0.5 + 0.5*((2*logstd_z).exp() + mu_z**2)).sum(dim=1).mean()
+        kl = -logstd_z - 0.5 + (torch.exp(2 * logstd_z) + mu_z**2) * 0.5
+        kl = kl.sum(1).mean()
         nelbo = rec + kl
         return {'nelbo':nelbo, 'rec':rec, 'kl':kl}
 
-    model = VAE(x_dim, Z_DIM, [32, 32], [32, 32])
+    model = VAE(x_dim, Z_DIM, [128, 128], [128, 128]).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():
         model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
     else:
-        losses_train, losses_test = [], []
+        losses_train, losses_test = defaultdict(list), defaultdict(list)
 
     if TRAIN:
+        print(f"Training q1_a on {DEVICE}.")
         trainloader = DataLoader(TensorDataset(train_data, torch.zeros(train_data.shape[0])),
                                  batch_size=BATCH_SIZE, shuffle=True)
         testloader = DataLoader(TensorDataset(test_data, torch.zeros(test_data.shape[0])),
@@ -89,8 +91,10 @@ def q1(train_data, test_data, part, dset_id):
 
         learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, callback_list)
         l_train, l_test = learner.fit(MAX_EPOCHS)
-        losses_train.extend(l_train)
-        losses_test.extend(l_test)
+        for key, value in l_train.items():
+            losses_train[key].extend(value)
+        for key, value in l_test.items():
+            losses_test[key].extend(value)
 
         torch.save({'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
@@ -101,19 +105,24 @@ def q1(train_data, test_data, part, dset_id):
     else:
         print(f"No training, only generating data from last available model.")
 
-    xlocation, xlogscale = model.sample(100, DEVICE)
-    samples = xlocation.to("cpu")
-    samples_noisy = torch.randn_like(samples) * xlogscale.exp() + xlocation
+    mu_x, logstd_x = model.sample(1000, DEVICE)
+    samples = descale(mu_x.to("cpu"), xmin, xmax)
+    samples_noisy = descale(torch.randn_like(samples) * logstd_x.exp().to("cpu") + mu_x.to("cpu"), xmin, xmax)
 
-    train_elbo = [x[0] for x in losses_train]
-    train_rec = [x[1] for x in losses_train]
-    train_kl = [x[2] for x in losses_train]
-    train_losses = np.array([[train_elbo], [train_rec], [train_kl]])
+    train_losses = np.array([losses_train['nelbo'], losses_train['rec'], losses_train['kl']]).T
+    test_losses = np.array([losses_test['nelbo'], losses_test['rec'], losses_test['kl']]).T
 
-    test_elbo = [x[0] for x in losses_test]
-    test_rec = [x[1] for x in losses_test]
-    test_kl = [x[2] for x in losses_test]
-    test_losses = np.array([[test_elbo], [test_rec], [test_kl]])
+    return train_losses, test_losses, samples_noisy.numpy(), samples.numpy()
+    
+    # model = FullyConnectedVAE(2, 2, [128, 128], [128, 128]).cuda()
+    # train_loader = data.DataLoader(train_data, batch_size=128, shuffle=True)
+    # test_loader = data.DataLoader(test_data, batch_size=128)
+    # train_losses, test_losses = train_epochs(model, train_loader, test_loader,
+    #                                          dict(epochs=10, lr=1e-3), quiet=True)
+    # train_losses = np.stack((train_losses['loss'], train_losses['recon_loss'], train_losses['kl_loss']), axis=1)
+    # test_losses = np.stack((test_losses['loss'], test_losses['recon_loss'], test_losses['kl_loss']), axis=1)
 
-    return train_losses, test_losses, samples.numpy(), samples_noisy.numpy()
+    # samples_noise = model.sample(1000, noise=True)
+    # samples_nonoise = model.sample(1000, noise=False)
 
+    # return train_losses, test_losses, samples_noise, samples_nonoise

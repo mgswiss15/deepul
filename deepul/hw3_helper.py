@@ -1,6 +1,6 @@
 from .utils import *
 
-resultsdir = '../hw2/results'
+resultsdir = '../hw3/results'
 
 
 def plot_vae_training_plot(train_losses, test_losses, title, fname):

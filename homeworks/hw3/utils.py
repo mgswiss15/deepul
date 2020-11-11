@@ -19,6 +19,7 @@ class Learner():
         self.device = device
         self.clip_grads = clip_grads
         self.callback_list = callback_list
+        self.epoch = 0
         for cb in self.callback_list:
             cb.init_learner(self)
 
@@ -38,7 +39,7 @@ class Learner():
             for key, value in losses.items():
                 losses_test[key].extend(value)
             # losses_test.extend(losses)
-            print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
+            print(f"Losses: train = {losses_train['nelbo'][-1]}, test = {losses_test['nelbo'][-1]}.", flush=True)
         self.callback('fit_end')
         return losses_train, losses_test
 
@@ -64,15 +65,14 @@ class Learner():
         losses = defaultdict(list)
         self.model.eval()
         with torch.no_grad():
-            loss = Counter({'nelbo':0., 'rec':0., 'kl':0.})
+            loss = {'nelbo':0., 'rec':0., 'kl':0.}
             n_samples = 0.
             for batch in self.testloader:
                 batch = [b.to(self.device) for b in batch]
                 out = self.model(batch[0])
                 batch_size = batch[0].shape[0]
                 ll = self.loss_func(batch[0], *out)
-                ll = Counter({key: value.item()*batch_size for (key, value) in ll.items()})
-                loss += ll
+                loss = {key: loss.get(key) + ll.get(key).item()*batch_size for key in ll.keys()}
                 n_samples += batch_size
             for key, value in loss.items():
                 losses[key].append(value / n_samples)
@@ -88,14 +88,15 @@ class Learner():
 def rescale(x, min, max):
     """Rescale x to [-1, 1]."""
 
-    out = 2. * (x - min) / (max - min) - 1.
-    return out
+    # return 2. * (x - min) / (max - min) - 1.
+    return x
 
 
 def descale(x, min, max):
     """Descale x from [-1, 1] to [min, max]."""
 
-    return (x + 1.) * (max - min) / 2. + min
+    # return (x + 1.) * (max - min) / 2. + min
+    return x
 
 
 def jitter(x, colcats):
