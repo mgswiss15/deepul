@@ -45,7 +45,7 @@ def q1(train_data, test_data, part, dset_id):
     - a numpy array of size (1000, 2) of 1000 samples WITHOUT decoder noise, i.e. sample z ~ p(z), x = mu(z)
     """
 
-    modelpath = f'{resultsdir}/q1_a_model.pickle'
+    modelpath = f'{resultsdir}/q1_{part}_model.pickle'
 
     train_data = torch.from_numpy(train_data)
     xmin, _ = train_data.min(dim=0)
@@ -53,26 +53,20 @@ def q1(train_data, test_data, part, dset_id):
     train_data = rescale(train_data, xmin, xmax)
     test_data = rescale(torch.from_numpy(test_data), xmin, xmax)
     save_scatter_2d(train_data, title='Train data',
-                    fname=f'{resultsdir}/q1_a_dset{dset_id}_traindata.png')
+                    fname=f'{resultsdir}/q1_{part}_dset{dset_id}_traindata.png')
 
     x_dim = train_data.shape[1]
     Z_DIM = 2
 
     def loss_func(data, mu_x, logstd_x, mu_z, logstd_z):
         """ELBO loss."""
-        # logstd_x = torch.ones_like(logstd_x)*-0.
-        # dist_x0 = D.Normal(mu_x[:, 0], logstd_x[:, 0].exp())
-        # dist_x1 = D.Normal(mu_x[:, 1], logstd_x[:, 1].exp())
-        # rec = -(dist_x0.log_prob(data[:, 0]) + dist_x1.log_prob(data[:, 1])).mean()
-        rec = 0.5 * np.log(2 * np.pi) + logstd_x + (data - mu_x)**2 * torch.exp(-2 * logstd_x) * 0.5
-        rec = rec.sum(1).mean()
-        # kl = (-logstd_z - 0.5 + 0.5*((2*logstd_z).exp() + mu_z**2)).sum(dim=1).mean()
-        kl = -logstd_z - 0.5 + (torch.exp(2 * logstd_z) + mu_z**2) * 0.5
-        kl = kl.sum(1).mean()
+        dist_x = D.Normal(mu_x.reshape(-1), logstd_x.reshape(-1).exp())
+        rec = -(dist_x.log_prob(data.view(-1))).sum() / data.shape[0]
+        kl = (-logstd_z - 0.5 + 0.5*((2*logstd_z).exp() + mu_z**2)).sum(dim=1).mean()
         nelbo = rec + kl
         return {'nelbo':nelbo, 'rec':rec, 'kl':kl}
 
-    model = VAE(x_dim, Z_DIM, [128, 128], [128, 128]).to(DEVICE)
+    model = VAE(x_dim, Z_DIM, [16, 16], [16, 16]).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():
@@ -113,16 +107,3 @@ def q1(train_data, test_data, part, dset_id):
     test_losses = np.array([losses_test['nelbo'], losses_test['rec'], losses_test['kl']]).T
 
     return train_losses, test_losses, samples_noisy.numpy(), samples.numpy()
-    
-    # model = FullyConnectedVAE(2, 2, [128, 128], [128, 128]).cuda()
-    # train_loader = data.DataLoader(train_data, batch_size=128, shuffle=True)
-    # test_loader = data.DataLoader(test_data, batch_size=128)
-    # train_losses, test_losses = train_epochs(model, train_loader, test_loader,
-    #                                          dict(epochs=10, lr=1e-3), quiet=True)
-    # train_losses = np.stack((train_losses['loss'], train_losses['recon_loss'], train_losses['kl_loss']), axis=1)
-    # test_losses = np.stack((test_losses['loss'], test_losses['recon_loss'], test_losses['kl_loss']), axis=1)
-
-    # samples_noise = model.sample(1000, noise=True)
-    # samples_nonoise = model.sample(1000, noise=False)
-
-    # return train_losses, test_losses, samples_noise, samples_nonoise

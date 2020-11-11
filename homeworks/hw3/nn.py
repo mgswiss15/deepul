@@ -61,11 +61,12 @@ class VAE(nn.Module):
         self.z_dim = z_dim
         self.encoder = Encoder(x_dim, z_dim, hiddenE)
         self.reparam = Reparametrization()
-        self.decoder = Decoder(x_dim, z_dim, hiddenE)
+        self.decoder = Decoder(x_dim, z_dim, hiddenD)
 
     def forward(self, x):
         mu_z, logstd_z = self.encoder(x)
-        zsample = self.reparam(mu_z, logstd_z.exp())
+        zsample = torch.randn_like(mu_z) * logstd_z.exp() + mu_z
+        # zsample = self.reparam(mu_z, logstd_z.exp())
         mu_x, logstd_x = self.decoder(zsample)
         return mu_x, logstd_x, mu_z, logstd_z
 

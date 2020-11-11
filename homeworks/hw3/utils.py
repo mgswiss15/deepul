@@ -88,15 +88,15 @@ class Learner():
 def rescale(x, min, max):
     """Rescale x to [-1, 1]."""
 
-    # return 2. * (x - min) / (max - min) - 1.
-    return x
+    return 2. * (x - min) / (max - min) - 1.
+    # return x
 
 
 def descale(x, min, max):
     """Descale x from [-1, 1] to [min, max]."""
 
-    # return (x + 1.) * (max - min) / 2. + min
-    return x
+    return (x + 1.) * (max - min) / 2. + min
+    # return x
 
 
 def jitter(x, colcats):
