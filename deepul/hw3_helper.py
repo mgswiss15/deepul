@@ -1,5 +1,7 @@
 from .utils import *
 
+resultsdir = '../hw2/results'
+
 
 def plot_vae_training_plot(train_losses, test_losses, title, fname):
     elbo_train, recon_train, kl_train = train_losses[:, 0], train_losses[:, 1], train_losses[:, 2]
@@ -81,11 +83,11 @@ def q1_save_results(part, dset_id, fn):
           f'KL Loss: {test_losses[-1, 2]:.4f}')
 
     plot_vae_training_plot(train_losses, test_losses, f'Q1({part}) Dataset {dset_id} Train Plot',
-                           f'results/q1_{part}_dset{dset_id}_train_plot.png')
+                           f'{resultsdir}/q1_{part}_dset{dset_id}_train_plot.png')
     save_scatter_2d(samples_noise, title='Samples with Decoder Noise',
-                    fname=f'results/q1_{part}_dset{dset_id}_sample_with_noise.png')
+                    fname=f'{resultsdir}/q1_{part}_dset{dset_id}_sample_with_noise.png')
     save_scatter_2d(samples_nonoise, title='Samples without Decoder Noise',
-                    fname=f'results/q1_{part}_dset{dset_id}_sample_without_noise.png')
+                    fname=f'{resultsdir}/q1_{part}_dset{dset_id}_sample_without_noise.png')
 
 
 def visualize_colored_shapes():
@@ -125,13 +127,13 @@ def q2_save_results(part, dset_id, fn):
     print(f'Final -ELBO: {test_losses[-1, 0]:.4f}, Recon Loss: {test_losses[-1, 1]:.4f}, '
           f'KL Loss: {test_losses[-1, 2]:.4f}')
     plot_vae_training_plot(train_losses, test_losses, f'Q2({part}) Dataset {dset_id} Train Plot',
-                           f'results/q2_{part}_dset{dset_id}_train_plot.png')
+                           f'{resultsdir}/q2_{part}_dset{dset_id}_train_plot.png')
     show_samples(samples, title=f'Q2({part}) Dataset {dset_id} Samples',
-                 fname=f'results/q2_{part}_dset{dset_id}_samples.png')
+                 fname=f'{resultsdir}/q2_{part}_dset{dset_id}_samples.png')
     show_samples(reconstructions, title=f'Q2({part}) Dataset {dset_id} Reconstructions',
-                 fname=f'results/q2_{part}_dset{dset_id}_reconstructions.png')
+                 fname=f'{resultsdir}/q2_{part}_dset{dset_id}_reconstructions.png')
     show_samples(interpolations, title=f'Q2({part}) Dataset {dset_id} Interpolations',
-                 fname=f'results/q2_{part}_dset{dset_id}_interpolations.png')
+                 fname=f'{resultsdir}/q2_{part}_dset{dset_id}_interpolations.png')
 
 
 def q3_save_results(dset_id, fn):
@@ -147,13 +149,13 @@ def q3_save_results(dset_id, fn):
     print(f'VQ-VAE Final Test Loss: {vqvae_test_losses[-1]:.4f}')
     print(f'PixelCNN Prior Final Test Loss: {pixelcnn_test_losses[-1]:.4f}')
     save_training_plot(vqvae_train_losses, vqvae_test_losses,f'Q3 Dataset {dset_id} VQ-VAE Train Plot',
-                       f'results/q3_dset{dset_id}_vqvae_train_plot.png')
+                       f'{resultsdir}/q3_dset{dset_id}_vqvae_train_plot.png')
     save_training_plot(pixelcnn_train_losses, pixelcnn_test_losses,f'Q3 Dataset {dset_id} PixelCNN Prior Train Plot',
-                       f'results/q3_dset{dset_id}_pixelcnn_train_plot.png')
+                       f'{resultsdir}/q3_dset{dset_id}_pixelcnn_train_plot.png')
     show_samples(samples, title=f'Q3 Dataset {dset_id} Samples',
-                 fname=f'results/q3_dset{dset_id}_samples.png')
+                 fname=f'{resultsdir}/q3_dset{dset_id}_samples.png')
     show_samples(reconstructions, title=f'Q3 Dataset {dset_id} Reconstructions',
-                 fname=f'results/q3_dset{dset_id}_reconstructions.png')
+                 fname=f'{resultsdir}/q3_dset{dset_id}_reconstructions.png')
 
 
 def q4_a_save_results(dset_id, fn):
@@ -169,13 +171,13 @@ def q4_a_save_results(dset_id, fn):
     print(f'VQ-VAE Final Test Loss: {vqvae_test_losses[-1]:.4f}')
     print(f'PixelCNN Prior Final Test Loss: {pixelcnn_test_losses[-1]:.4f}')
     save_training_plot(vqvae_train_losses, vqvae_test_losses,f'Q4(a) Dataset {dset_id} VQ-VAE Train Plot',
-                       f'results/q4_a_dset{dset_id}_vqvae_train_plot.png')
+                       f'{resultsdir}/q4_a_dset{dset_id}_vqvae_train_plot.png')
     save_training_plot(pixelcnn_train_losses, pixelcnn_test_losses,f'Q4(a) Dataset {dset_id} PixelCNN Prior Train Plot',
-                       f'results/q4_a_dset{dset_id}_pixelcnn_train_plot.png')
+                       f'{resultsdir}/q4_a_dset{dset_id}_pixelcnn_train_plot.png')
     show_samples(samples, title=f'Q4(a) Dataset {dset_id} Samples',
-                 fname=f'results/q4_a_dset{dset_id}_samples.png')
+                 fname=f'{resultsdir}/q4_a_dset{dset_id}_samples.png')
     show_samples(reconstructions, title=f'Q4(a) Dataset {dset_id} Reconstructions',
-                 fname=f'results/q4_a_dset{dset_id}_reconstructions.png')
+                 fname=f'{resultsdir}/q4_a_dset{dset_id}_reconstructions.png')
 
 
 def q4_b_save_results(fn):
@@ -188,8 +190,8 @@ def q4_b_save_results(fn):
     print(f'Final -ELBO: {test_losses[-1, 0]:.4f}, Recon Loss: {test_losses[-1, 1]:.4f}, '
           f'KL Loss: {test_losses[-1, 2]:.4f}')
     plot_vae_training_plot(train_losses, test_losses, f'Q4({part}) Train Plot',
-                           f'results/q4_{part}_train_plot.png')
+                           f'{resultsdir}/q4_{part}_train_plot.png')
     show_samples(samples, title=f'Q4({part}) Samples',
-                 fname=f'results/q4_{part}_samples.png')
+                 fname=f'{resultsdir}/q4_{part}_samples.png')
     show_samples(reconstructions, title=f'Q4({part}) Reconstructions',
-                 fname=f'results/q4_{part}_reconstructions.png')
+                 fname=f'{resultsdir}/q4_{part}_reconstructions.png')

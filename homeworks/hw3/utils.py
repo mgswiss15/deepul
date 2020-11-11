@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from deepul.utils import savefig
+from collections import Counter, defaultdict
 
 
 class Learner():
@@ -24,49 +25,57 @@ class Learner():
     def fit(self, epochs):
         self.epochs = epochs
         self.callback('fit_begin')
-        losses_train = []
+        losses_train = defaultdict(list)
         losses_test = self.eval_epoch()
         for self.epoch in range(epochs):
             self.callback('epoch_begin')
             print(f"Training epoch {self.epoch} ...", flush=True)
             losses = self.train_epoch()
-            losses_train.extend(losses)
+            for key, value in losses.items():
+                losses_train[key].extend(value)
+            # losses_train.extend(losses)
             losses = self.eval_epoch()
-            losses_test.extend(losses)
+            for key, value in losses.items():
+                losses_test[key].extend(value)
+            # losses_test.extend(losses)
             print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
         self.callback('fit_end')
         return losses_train, losses_test
 
     def train_epoch(self):
         self.callback('train_epoch_begin')
-        losses = []
+        losses = defaultdict(list)
         self.model.train()
         for batch in self.trainloader:
             self.callback('train_batch_begin')
             batch = [b.to(self.device) for b in batch]
             self.optimizer.zero_grad()
             out = self.model(batch[0])
-            loss = self.loss_func(*out)
-            loss.backward()
+            loss = self.loss_func(batch[0], *out)
+            loss['nelbo'].backward()
             if self.clip_grads:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
             self.optimizer.step()
-            losses.append(loss.item())
+            for key, value in loss.items():
+                losses[key].append(value.item())
         return losses
 
     def eval_epoch(self):
-        losses = []
+        losses = defaultdict(list)
         self.model.eval()
         with torch.no_grad():
-            loss = 0.
+            loss = Counter({'nelbo':0., 'rec':0., 'kl':0.})
             n_samples = 0.
             for batch in self.testloader:
                 batch = [b.to(self.device) for b in batch]
                 out = self.model(batch[0])
                 batch_size = batch[0].shape[0]
-                loss += self.loss_func(*out).item() * batch_size
+                ll = self.loss_func(batch[0], *out)
+                ll = Counter({key: value.item()*batch_size for (key, value) in ll.items()})
+                loss += ll
                 n_samples += batch_size
-            losses.append(loss / n_samples)
+            for key, value in loss.items():
+                losses[key].append(value / n_samples)
         return losses
 
     def callback(self, cb_name, *args, **kwargs):
@@ -79,12 +88,8 @@ class Learner():
 def rescale(x, min, max):
     """Rescale x to [-1, 1]."""
 
-    n, h, w, c = x.shape
-    n_dims = h*w*c
-
     out = 2. * (x - min) / (max - min) - 1.
-    logjabobs = 2. / (max - min) * n_dims
-    return out, logjabobs
+    return out
 
 
 def descale(x, min, max):
@@ -108,27 +113,6 @@ def reload_modelstate(model, optimizer, modelpath):
     losses_train, losses_test = checkpoint['losses_train'], checkpoint['losses_test']
     print(f"Loded model from {modelpath}.")
     return model, optimizer, losses_train, losses_test
-
-
-def prep_data(data, colcats, dtype=torch.float):
-    targets = torch.from_numpy(data).to(dtype)
-    targets = targets.permute(0, 3, 1, 2)
-    data = jitter(targets, colcats)
-    return targets, data
-
-
-def bisection(func, n):
-    a = (torch.ones((n, 1))*(-10.)).to("cuda")
-    b = -a
-    while True:
-        m = (a + b) / 2.
-        mask = (func(m) * func(a)) < 0
-        b = mask * m + ~mask * b
-        a = ~mask * m + mask * a
-        if ((b-a) < 1e-5).all():
-            m = (a + b) / 2.
-            break
-    return m
 
 
 def save_lr_plot(lr, epochs, fname):

@@ -12,10 +12,10 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
     n, h, w, c = x.shape
     n_dims = h*w*c
 
-    def logit(z):
-        n = z.shape[0]
-        out = z.log() - (1 - z).log()
-        logjacobs = (1/z + 1/(1-z)).view(n, -1).sum(dim=1)
+    def logit(p):
+        n = p.shape[0]
+        out = p.log() - (1 - p).log()
+        logjacobs = (1/p + 1/(1-p)).reshape(n, -1).sum(dim=1)
         return out, logjacobs
 
     minx, _ = logit(torch.tensor([alpha, ]))
@@ -33,7 +33,7 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
     else:
         x = descale(x, minx, maxx)
         x = torch.sigmoid(x)
-        x = (x-alpha)/(1-alpha)
+        x = (x-alpha)/(1-2*alpha)
         return x.permute(0, 2, 3, 1)
 
 

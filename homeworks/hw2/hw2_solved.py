@@ -11,6 +11,7 @@ from pathlib import Path
 import torch.distributions as D
 from homeworks.hw2.realnvp import dequantize, RealNVP
 import homeworks.hw2.callbacks as cb
+from deepul.utils import show_samples
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
 DEVICE = torch.device("cpu")
@@ -255,9 +256,9 @@ def q3_a(train_data, test_data):
         logpdf = logpdf.mean() if aggregate else logpdf
         return -logpdf
 
-    model = RealNVP(3, 8, 3, 2, img_shape).to(DEVICE)
-    # model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
-    model = RealNVP(3, 64, 3, 4, img_shape).to(DEVICE)
+    # model = RealNVP(3, 8, 3, 2, img_shape).to(DEVICE)
+    model = RealNVP(3, 128, 3, 8, img_shape).to(DEVICE)
+    # model = RealNVP(3, 64, 3, 4, img_shape).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():
@@ -300,6 +301,8 @@ def q3_a(train_data, test_data):
         print("Interpolations ...")
         testidx = torch.randint(0, test_data.shape[0], (n_rows*2,))
         imgs = torch.index_select(test_data, 0, testidx).to(DEVICE)
+        imgs_plot = dequantize(imgs.to("cpu"), COLCATS, forward=False).numpy()
+        show_samples(imgs_plot * 255.0, f'{resultsdir}/q3_a_data.png', nrow=6, title='Data')
         model.eval()
         with torch.no_grad():
             zs, _ = model(imgs)
@@ -308,6 +311,7 @@ def q3_a(train_data, test_data):
             weights = torch.linspace(0., 1., 6, device=DEVICE).repeat(5)[:, None, None, None]
             zs = weights * z1 + (1-weights) * z2
             inter = model.reverse(zs)
+            print('Inter stats', inter.max(), inter.min())
         return dequantize(inter.to("cpu"), COLCATS, forward=False)
 
     inter = interpolations(5)
@@ -395,6 +399,8 @@ def q3_b(train_data, test_data):
         print("Interpolations ...")
         testidx = torch.randint(0, test_data.shape[0], (n_rows*2,))
         imgs = torch.index_select(test_data, 0, testidx).to(DEVICE)
+        imgs_plot = dequantize(imgs.to("cpu"), COLCATS, forward=False).numpy()
+        show_samples(imgs_plot * 255.0, f'{resultsdir}/q3_a_data.png', nrow=6, title='Interpolations')
         model.eval()
         with torch.no_grad():
             zs, _ = model(imgs)
@@ -406,5 +412,6 @@ def q3_b(train_data, test_data):
         return dequantize(inter.to("cpu"), COLCATS, forward=False)
 
     inter = interpolations(5)
+    print('Iter stats', iter.max(), iter.min())
 
     return np.array(losses_train), np.array(losses_test), samples.numpy(), inter.numpy()
