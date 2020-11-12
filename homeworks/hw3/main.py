@@ -6,7 +6,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("ex", type=str, choices=["q1_a", "q1_b"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2_a"],
                     help="Code of hw to do.")
 
 parser.add_argument("--ds", type=int, choices=[1, 2],
@@ -63,6 +63,10 @@ if args.ex == "q1_a":
     q1_save_results('a', args.ds, hw.q1)
 elif args.ex == "q1_b":
     q1_save_results('b', args.ds, hw.q1)
+elif args.ex == "q2_a":
+    q2_save_results('a', args.ds, hw.q2_a)
+
+
 
 if not args.screen:
     sys.stdout = origout

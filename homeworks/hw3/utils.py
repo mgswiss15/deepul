@@ -126,3 +126,26 @@ def save_lr_plot(lr, epochs, fname):
     plt.xlabel('Epoch')
     plt.ylabel('lr')
     savefig(fname)
+
+
+def dequantize(x, colcats, alpha=0.05, forward=True):
+    """Logit gequantization from 4.1 of RealNVP."""
+
+    def logit(p):
+        out = p.log() - (1 - p).log()
+        return out
+
+    minx = logit(torch.tensor([alpha, ]))
+    maxx = logit(torch.tensor([1 - alpha, ]))
+    if forward:
+        x = x.float()
+        x = jitter(x, colcats)
+        x = alpha + (1. - 2*alpha) * x
+        x = logit(x)
+        x = rescale(x, minx, maxx)
+        return x.permute(0, 3, 1, 2).contiguous()
+    else:
+        x = descale(x, minx, maxx)
+        x = torch.sigmoid(x)
+        x = (x-alpha)/(1-2*alpha) * colcats
+        return x.permute(0, 2, 3, 1)
