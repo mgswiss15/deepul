@@ -15,7 +15,7 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
     def logit(p):
         n = p.shape[0]
         out = p.log() - (1 - p).log()
-        logjacobs = (1/p + 1/(1-p)).reshape(n, -1).sum(dim=1)
+        logjacobs = (1/p + 1/(1-p)).reshape(n, -1).sum(dim=1).log()
         return out, logjacobs
 
     minx, _ = logit(torch.tensor([alpha, ]))
@@ -24,7 +24,7 @@ def dequantize(x, colcats, alpha=0.05, forward=True):
         x = x.float()
         x = jitter(x, colcats)
         x = alpha + (1. - 2*alpha) * x
-        logjacobs = torch.tensor([- 2*alpha*n_dims, ])
+        logjacobs = torch.tensor([2*alpha*n_dims, ]).log()
         x, ljd = logit(x)
         logjacobs += ljd.mean()
         x, ljd = rescale(x, minx, maxx)

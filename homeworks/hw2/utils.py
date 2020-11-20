@@ -83,7 +83,7 @@ def rescale(x, min, max):
     n_dims = h*w*c
 
     out = 2. * (x - min) / (max - min) - 1.
-    logjabobs = 2. / (max - min) * n_dims
+    logjabobs = (2. / (max - min) * n_dims).log()
     return out, logjabobs
 
 

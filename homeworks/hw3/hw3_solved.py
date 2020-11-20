@@ -13,6 +13,7 @@ import homeworks.hw3.callbacks as cb
 import homeworks.hw3.nn as nn_
 from collections import defaultdict
 import matplotlib.pyplot as plt
+from homeworks.hw3.vqvae import VqVae, VqLearner
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
 DEVICE = torch.device("cpu")
@@ -155,8 +156,6 @@ def q2_a(train_data, test_data, dset_id):
 
     def loss_func(data, mu_x, logstd_x, mu_z, logstd_z):
         """ELBO loss."""
-        # dist_x = D.Normal(mu_x.reshape(-1), logstd_x.reshape(-1).exp())
-        # rec = -(dist_x.log_prob(data.view(-1))).sum() / data.shape[0]
         rec = 0.5*((mu_x - data)**2).sum(dim=(1, 2, 3)).mean()
         kl = (-logstd_z - 0.5 + 0.5*((2*logstd_z).exp() + mu_z**2)).sum(dim=1).mean()
         nelbo = rec + kl
@@ -263,16 +262,7 @@ def q2_b(train_data, test_data, dset_id):
 
     x_dim = train_data.shape[1]
 
-    def loss_func(data, mu_x, logstd_x, mu_z, logstd_z):
-        """ELBO loss."""
-        # dist_x = D.Normal(mu_x.reshape(-1), logstd_x.reshape(-1).exp())
-        # rec = -(dist_x.log_prob(data.view(-1))).sum() / data.shape[0]
-        rec = 0.5*((mu_x - data)**2).sum(dim=(1, 2, 3)).mean()
-        kl = (-logstd_z - 0.5 + 0.5*((2*logstd_z).exp() + mu_z**2)).sum(dim=1).mean()
-        nelbo = rec + kl
-        return {'nelbo':nelbo, 'rec':rec, 'kl':kl}
-
-    model = nn_.VAEAF(x_dim, Z_DIM, nn_.EncoderConv, nn_.DecoderConv).to(DEVICE)
+    model = nn_.VaeAf(x_dim, Z_DIM, [512, 512], nn_.EncoderConv, nn_.DecoderConv).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     if RELOAD and Path(modelpath).exists():
@@ -290,7 +280,7 @@ def q2_b(train_data, test_data, dset_id):
         callback_list = [cb.CombinedScheduler('lr', ['cosine_sched', 'cosine_sched'],
                                               0.2, LEARN_RATE, MAXLEARN_RATE, LEARN_RATE)]
 
-        learner = Learner(model, optimizer, trainloader, testloader, loss_func, DEVICE, callback_list)
+        learner = Learner(model, optimizer, trainloader, testloader, model.loss_func, DEVICE, callback_list)
         l_train, l_test = learner.fit(MAX_EPOCHS)
         for key, value in l_train.items():
             losses_train[key].extend(value)
@@ -307,13 +297,13 @@ def q2_b(train_data, test_data, dset_id):
     else:
         print(f"No training, only generating data from last available model.")
 
-    mu_x, logstd_x = model.sample(100, DEVICE)
+    mu_x = model.sample(100, DEVICE)
     samples = dequantize(mu_x.to("cpu"), COLCATS, forward=False)
 
     model.eval()
     with torch.no_grad():
         recdata = test_data[:50, ...]
-        reconstruct, _, _, _ = model(recdata.to(DEVICE))
+        reconstruct, _, _ = model(recdata.to(DEVICE))
         reconstruct = torch.cat((recdata, reconstruct.to("cpu")), dim=1).view(100, 3, 32, 32)
         reconstruct = dequantize(reconstruct, COLCATS, forward=False)
 
@@ -339,3 +329,82 @@ def q2_b(train_data, test_data, dset_id):
     test_losses = np.array([losses_test['nelbo'], losses_test['rec'], losses_test['kl']]).T
 
     return train_losses, test_losses, samples.numpy(), reconstruct.numpy(), inter.numpy()
+
+
+def q3(train_data, test_data, dset_id):
+    """
+    train_data: An (n_train, 32, 32, 3) uint8 numpy array of color images with values in [0, 255]
+    test_data: An (n_test, 32, 32, 3) uint8 numpy array of color images with values in [0, 255]
+    dset_id: An identifying number of which dataset is given (1 or 2). Most likely
+               used to set different hyperparameters for different datasets
+
+    Returns
+    - a (# of training iterations,) numpy array of VQ-VAE train losess evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of VQ-VAE train losses evaluated once at initialization and after each epoch
+    - a (# of training iterations,) numpy array of PixelCNN prior train losess evaluated every minibatch
+    - a (# of epochs + 1,) numpy array of PixelCNN prior train losses evaluated once at initialization and after each epoch
+    - a (100, 32, 32, 3) numpy array of 100 samples with values in {0, ... 255}
+    - a (100, 32, 32, 3) numpy array of 50 real image / reconstruction pairs
+      FROM THE TEST SET with values in [0, 255]
+    """
+
+    modelpath = f'{resultsdir}/q3_model.pickle'
+
+    COLCATS = 256
+    CODEDIM = 256
+    NCODES = 128
+
+    train_data = dequantize(torch.from_numpy(train_data), COLCATS)
+    test_data = dequantize(torch.from_numpy(test_data), COLCATS)
+    # train_data = train_data[:200, ...]
+    # test_data = test_data[:200, ...]
+
+    n, c, h, w = train_data.shape
+    n_dims = c*h*w
+
+    model = VqVae(c, CODEDIM, NCODES).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    if RELOAD and Path(modelpath).exists():
+        model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
+    else:
+        losses_train, losses_test = [], []
+
+    if TRAIN:
+        print(f"Training q1_a on {DEVICE}.")
+        trainloader = DataLoader(TensorDataset(train_data),
+                                 batch_size=BATCH_SIZE, shuffle=True)
+        testloader = DataLoader(TensorDataset(test_data),
+                                batch_size=BATCH_SIZE)
+
+        callback_list = []
+
+        learner = VqLearner(model, optimizer, trainloader, testloader, model.loss_func, DEVICE, callback_list)
+        l_train, l_test = learner.fit(MAX_EPOCHS)
+        losses_train.extend(l_train)
+        losses_test.extend(l_test)
+
+        torch.save({'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'losses_train': losses_train,
+                    'losses_test': losses_test},
+                   modelpath)
+        print(f"Saved model to {modelpath}.")
+        # save_lr_plot(learner.schedule['lr'], MAX_EPOCHS, f'{resultsdir}/q3_dset{dset_id}_lrschedule.png')
+    else:
+        print(f"No training, only generating data from last available model.")
+
+    mu_x = model.sample(100, DEVICE)
+    samples = dequantize(mu_x.to("cpu"), COLCATS, forward=False)
+
+    model.eval()
+    with torch.no_grad():
+        recdata = test_data[:50, ...]
+        reconstruct, _, _ = model(recdata.to(DEVICE))
+        reconstruct = torch.cat((recdata, reconstruct.to("cpu")), dim=1).view(100, 3, 32, 32)
+        reconstruct = dequantize(reconstruct, COLCATS, forward=False)
+
+    losses_train = np.array([x / n_dims for x in losses_train])
+    losses_test = np.array([x / n_dims for x in losses_test])
+
+    return losses_train, losses_test, losses_train, losses_test, samples.numpy(), reconstruct.numpy()
