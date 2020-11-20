@@ -2,7 +2,8 @@
 
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
+from homeworks.hw3.utils import rescale, descale
 
 class EncoderVqVae(nn.Module):
     """Encoder for VQVAE"""
@@ -52,25 +53,6 @@ class ResBlock(nn.Module):
         return x + out
 
 
-# class Vq(torch.autograd.Function):
-#     """Vector quantization."""
-
-#     @staticmethod
-#     def forward(ctx, x, codes):
-#         n, c, h, w = x.shape
-#         ncodes, codedim = codes.shape
-#         x = x.permute(0, 2, 3, 1).reshape(-1, codedim).expand(ncodes, -1, -1)
-#         codes = codes[:, None, :].expand_as(x)
-#         distmat = torch.norm(x-codes, 2, dim=2)
-#         minvals, minidx = distmat.min(dim=0)
-#         # z = minidx.view(n, 1, h, w)
-#         return minidx
-
-#     @staticmethod
-#     def backward(ctx, out_grad):
-#         return out_grad, out_grad
-
-
 class VqVae(nn.Module):
     """VQVAE model."""
 
@@ -82,21 +64,18 @@ class VqVae(nn.Module):
         self.encoder = EncoderVqVae(codedim, xchannels)
         self.decoder = DecoderVqVae(codedim, xchannels)
 
-    def forward(self, x):
+    def forward(self, x, learnprior=False):
         zenc = self.encoder(x)
         n, c, h, w = zenc.shape
         idx = self.get_codes(zenc.detach())
         zdec = torch.index_select(self.codes, dim=0, index=idx)
         zdec = zdec.view(n, h, w, c).permute(0, 3, 1, 2)
         xhat = self.decoder((zdec - zenc).detach() + zenc)
-        # print(f"zenc {zenc.requires_grad}")
-        # print(f"idx {idx.requires_grad}")
-        # print(f"zdec {zdec.requires_grad}")
-        # print(f"xhat {xhat.requires_grad}")
-        # zenc.register_hook(lambda grad: print(f"zenc grad {grad.shape} {grad[0, 0, ...]}."))
-        # zdec.register_hook(lambda grad: print(f"zdec grad {grad.shape} {grad[0, 0, ...]}."))
-        # self.codes.register_hook(lambda grad: print(f"codes grad {grad.shape} {grad[:10, :10]}."))
-        return xhat, zenc, zdec
+        if learnprior:
+            z = idx.view(n, 1, h, w)
+            return z
+        else:
+            return xhat, zenc, zdec
 
     def get_codes(self, ze):
         n, c, h, w = ze.shape
@@ -107,18 +86,99 @@ class VqVae(nn.Module):
         # z = minidx.view(n, 1, h, w)
         return minidx.long()
 
-    def loss_func(self, x, xhat, ze, zd, beta=0.25):
+    def loss_func(self, x, xhat, ze, zd, z, beta=0.25):
         reconstruct = 0.5*((x - xhat)**2).sum(dim=(1, 2, 3)).mean()
         vq = ((ze.detach() - zd)**2).sum(dim=(1, 2, 3)).mean()
         commit = ((ze - zd.detach())**2).sum(dim=(1, 2, 3)).mean()
         return reconstruct + vq + beta*commit
 
-    def sample(self, n_samples, device):
+    def sample(self, zsample):
         self.eval()
         with torch.no_grad():
-            zsample = torch.randn((n_samples, self.codedim, 32, 32), device=device)
-            mu_x = self.decoder(zsample)
-            return mu_x
+            zdec = torch.index_select(self.codes, dim=0, index=zsample.view(-1).long())
+            zdec = zdec.view(zsample.shape[0], 8, 8, self.codedim).permute(0, 3, 1, 2)
+            xhat = self.decoder(zdec)
+            return xhat
+
+
+class MaskedConv2d(nn.Conv2d):
+    """Masked 2D convolution for single color channel as defined in PixelCNN paper."""
+
+    def __init__(self, masktype, in_channels, out_channels, kernel_size):
+        if masktype not in ['A', 'B']:
+            raise Exception(f"Mask type has to be A or B, not {masktype}.")
+        padding = kernel_size // 2
+        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=True)
+        mid = self.kernel_size[0] // 2
+        mask = torch.zeros_like(self.weight)
+        mask[:, :, :mid, :] = 1.
+        mask[:, :, mid, :mid] = 1.
+        if masktype == 'B':
+            mask[:, :, mid, mid] = 1.
+        self.mask = nn.Parameter(mask, requires_grad=False)
+
+    def forward(self, input):
+        data = input[0] if isinstance(input, list) else input
+        conv = self._conv_forward(data, self.weight * self.mask)
+        return conv
+
+
+class ResBlockPixelCNN(nn.Module):
+    """Residual block for single channel PixelCNN."""
+
+    def __init__(self, in_channels, kernel_size):
+        super().__init__()
+        mid_channels = in_channels // 2
+        self.conv1 = MaskedConv2d('B', in_channels, mid_channels, 1)
+        self.conv2 = MaskedConv2d('B', mid_channels, mid_channels, kernel_size)
+        self.conv3 = MaskedConv2d('B', mid_channels, in_channels, 1)
+
+    def forward(self, x):
+        y = self.conv1(F.relu(x))
+        y = self.conv2(F.relu(y))
+        y = self.conv3(F.relu(y))
+        return x + y
+
+
+class PixelCNN(nn.Module):
+    """PixelCNN model with residual blocks."""
+
+    def __init__(self, in_channels, n_filters, kernel_size, n_resblocks, n_cats):
+        super().__init__()
+        self.n_cats = n_cats
+        layers = []
+        layers = [MaskedConv2d('A', in_channels, n_filters, kernel_size)]
+        for _ in range(n_resblocks):
+            layers.append(nn.BatchNorm2d(n_filters))
+            layers.append(ResBlockPixelCNN(n_filters, kernel_size))
+        for _ in range(2):
+            layers.append(nn.BatchNorm2d(n_filters))
+            layers.append(nn.ReLU())
+            layers.append(MaskedConv2d('B', n_filters, n_filters, 1))
+        layers.append(nn.ReLU())
+        layers.append(MaskedConv2d('B', n_filters, n_cats, 1))
+        self.sequential = nn.Sequential(*layers)
+
+    def forward(self, x):
+        out = self.sequential(x)
+        return out
+
+    def sample_data(self, n_samples, image_shape, device):
+        self.eval()
+        with torch.no_grad():
+            h, w = image_shape
+            samples = torch.multinomial(torch.ones(self.n_cats)/self.n_cats,
+                                        n_samples*h*w, replacement=True)
+            samples = samples.view(n_samples, 1, h, w)
+            samples = rescale(samples, 0., self.n_cats - 1.).to(device)
+            print(f"Sampling new examples ...", flush=True)
+            for hi in range(h):
+                for wi in range(w):
+                    logits = self(samples)[:, :, hi, wi].squeeze()
+                    probs = logits.softmax(dim=1)
+                    samples[:, 0, hi, wi] = torch.multinomial(probs, 1).squeeze()
+                    samples[:, 0, hi, wi] = rescale(samples[:, 0, hi, wi], 0., self.n_cats - 1.)
+        return samples
 
 
 class VqLearner():

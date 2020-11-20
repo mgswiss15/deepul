@@ -2,6 +2,7 @@
 
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 from deepul.hw3_helper import resultsdir
@@ -13,7 +14,9 @@ import homeworks.hw3.callbacks as cb
 import homeworks.hw3.nn as nn_
 from collections import defaultdict
 import matplotlib.pyplot as plt
-from homeworks.hw3.vqvae import VqVae, VqLearner
+from homeworks.hw3.vqvae import VqVae, VqLearner, PixelCNN
+from homeworks.hw1.utils import Learner
+
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
 DEVICE = torch.device("cpu")
@@ -364,6 +367,10 @@ def q3(train_data, test_data, dset_id):
 
     model = VqVae(c, CODEDIM, NCODES).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+    trainloader = DataLoader(TensorDataset(train_data),
+                             batch_size=BATCH_SIZE, shuffle=True)
+    testloader = DataLoader(TensorDataset(test_data),
+                            batch_size=BATCH_SIZE)
 
     if RELOAD and Path(modelpath).exists():
         model, optimizer, losses_train, losses_test = reload_modelstate(model, optimizer, modelpath)
@@ -372,10 +379,6 @@ def q3(train_data, test_data, dset_id):
 
     if TRAIN:
         print(f"Training q1_a on {DEVICE}.")
-        trainloader = DataLoader(TensorDataset(train_data),
-                                 batch_size=BATCH_SIZE, shuffle=True)
-        testloader = DataLoader(TensorDataset(test_data),
-                                batch_size=BATCH_SIZE)
 
         callback_list = []
 
@@ -394,9 +397,7 @@ def q3(train_data, test_data, dset_id):
     else:
         print(f"No training, only generating data from last available model.")
 
-    mu_x = model.sample(100, DEVICE)
-    samples = dequantize(mu_x.to("cpu"), COLCATS, forward=False)
-
+    # reconstructions
     model.eval()
     with torch.no_grad():
         recdata = test_data[:50, ...]
@@ -404,7 +405,60 @@ def q3(train_data, test_data, dset_id):
         reconstruct = torch.cat((recdata, reconstruct.to("cpu")), dim=1).view(100, 3, 32, 32)
         reconstruct = dequantize(reconstruct, COLCATS, forward=False)
 
-    losses_train = np.array([x / n_dims for x in losses_train])
-    losses_test = np.array([x / n_dims for x in losses_test])
+    losses_train_vqvae = np.array([x / n_dims for x in losses_train])
+    losses_test_vqvae = np.array([x / n_dims for x in losses_test])
 
-    return losses_train, losses_test, losses_train, losses_test, samples.numpy(), reconstruct.numpy()
+
+    # train prior for generations
+    z_train = torch.empty(n, 1, 8, 8)
+    z_test = torch.empty(test_data.shape[0], 1, 8, 8)
+
+    model.eval()
+    with torch.no_grad():
+        i = 0
+        for batch in trainloader:
+            ztemp = model(batch[0].to(DEVICE), learnprior=True)
+            z_train[i:i+BATCH_SIZE, ...] = ztemp.to("cpu")
+            i += BATCH_SIZE
+        i = 0
+        for batch in testloader:
+            ztemp = model(batch[0].to(DEVICE), learnprior=True)
+            z_test[i:i+BATCH_SIZE, ...] = ztemp.to("cpu")
+            i += BATCH_SIZE
+        print(f"Generated z datasets for training prior.")
+
+    train_targets, train_data = z_train.long(), rescale(z_train, 0., NCODES - 1.)
+    test_targets, test_data = z_test.long(), rescale(z_test, 0., NCODES - 1.)
+
+    trainloader = DataLoader(TensorDataset(train_data, train_targets),
+                             batch_size=BATCH_SIZE, shuffle=True)
+    testloader = DataLoader(TensorDataset(test_data, test_targets),
+                            batch_size=BATCH_SIZE)
+
+    modelprior = PixelCNN(1, 512, 3, 10, NCODES).to(DEVICE)
+    optimizerprior = optim.Adam(modelprior.parameters(), lr=LEARN_RATE)
+
+    def loss_funcprior(logits, targets):
+        """Cross entropy."""
+        logits = logits.view(-1, 1, NCODES, 8, 8).permute(0, 2, 1, 3, 4)
+        loss = F.cross_entropy(logits, targets, reduction='none')
+        return loss.sum(dim=(1, 2, 3)).mean(dim=0)
+
+    losses_train, losses_test = [], []
+    learnerprior = Learner(modelprior, optimizerprior, trainloader, testloader, loss_funcprior, DEVICE)
+    l_train, l_test = learnerprior.fit(MAX_EPOCHS)
+    losses_train.extend(l_train)
+    losses_test.extend(l_test)
+
+    losses_train_pixelcnn = np.array([x / 64 for x in losses_train])
+    losses_test_pixelcnn = np.array([x / 64 for x in losses_test])
+
+    model.eval()
+    modelprior.eval()
+    with torch.no_grad():
+        samplesz = modelprior.sample_data(100, (8, 8), DEVICE)
+        samplesz = descale(samplesz, 0., NCODES - 1.)
+        samples = model.sample(samplesz).to("cpu")
+        samples = dequantize(samples, COLCATS, forward=False)
+
+    return losses_train_vqvae, losses_test_vqvae, losses_train_pixelcnn, losses_test_pixelcnn, samples.numpy(), reconstruct.numpy()
