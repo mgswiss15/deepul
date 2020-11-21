@@ -14,8 +14,7 @@ import homeworks.hw3.callbacks as cb
 import homeworks.hw3.nn as nn_
 from collections import defaultdict
 import matplotlib.pyplot as plt
-from homeworks.hw3.vqvae import VqVae, VqLearner, PixelCNN
-from homeworks.hw1.utils import Learner
+from homeworks.hw3.vqvae import VqVae, VqLearner, PixelCNN, PixelCNNGated, LearnerPixelCNN
 
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
@@ -351,7 +350,7 @@ def q3(train_data, test_data, dset_id):
       FROM THE TEST SET with values in [0, 255]
     """
 
-    modelpath = f'{resultsdir}/q3_model.pickle'
+    modelpath = f'{resultsdir}/q3_dset{dset_id}_model.pickle'
 
     COLCATS = 256
     CODEDIM = 256
@@ -397,6 +396,9 @@ def q3(train_data, test_data, dset_id):
     else:
         print(f"No training, only generating data from last available model.")
 
+    losses_train_vqvae = np.array([x / n_dims for x in losses_train])
+    losses_test_vqvae = np.array([x / n_dims for x in losses_test])
+
     # reconstructions
     model.eval()
     with torch.no_grad():
@@ -405,13 +407,13 @@ def q3(train_data, test_data, dset_id):
         reconstruct = torch.cat((recdata, reconstruct.to("cpu")), dim=1).view(100, 3, 32, 32)
         reconstruct = dequantize(reconstruct, COLCATS, forward=False)
 
-    losses_train_vqvae = np.array([x / n_dims for x in losses_train])
-    losses_test_vqvae = np.array([x / n_dims for x in losses_test])
-
-
     # train prior for generations
     z_train = torch.empty(n, 1, 8, 8)
     z_test = torch.empty(test_data.shape[0], 1, 8, 8)
+
+# #####################
+#     z_train = torch.empty(BATCH_SIZE*3, 1, 8, 8)
+# #####################
 
     model.eval()
     with torch.no_grad():
@@ -420,6 +422,11 @@ def q3(train_data, test_data, dset_id):
             ztemp = model(batch[0].to(DEVICE), learnprior=True)
             z_train[i:i+BATCH_SIZE, ...] = ztemp.to("cpu")
             i += BATCH_SIZE
+# #####################
+#             if i==BATCH_SIZE*3:
+#                 break
+#             z_test = z_train
+# #####################
         i = 0
         for batch in testloader:
             ztemp = model(batch[0].to(DEVICE), learnprior=True)
@@ -435,7 +442,7 @@ def q3(train_data, test_data, dset_id):
     testloader = DataLoader(TensorDataset(test_data, test_targets),
                             batch_size=BATCH_SIZE)
 
-    modelprior = PixelCNN(1, 512, 3, 10, NCODES).to(DEVICE)
+    modelprior = PixelCNNGated(1, 256, 3, 8, NCODES).to(DEVICE)
     optimizerprior = optim.Adam(modelprior.parameters(), lr=LEARN_RATE)
 
     def loss_funcprior(logits, targets):
@@ -445,7 +452,7 @@ def q3(train_data, test_data, dset_id):
         return loss.sum(dim=(1, 2, 3)).mean(dim=0)
 
     losses_train, losses_test = [], []
-    learnerprior = Learner(modelprior, optimizerprior, trainloader, testloader, loss_funcprior, DEVICE)
+    learnerprior = LearnerPixelCNN(modelprior, optimizerprior, trainloader, testloader, loss_funcprior, DEVICE)
     l_train, l_test = learnerprior.fit(MAX_EPOCHS)
     losses_train.extend(l_train)
     losses_test.extend(l_test)

@@ -218,7 +218,6 @@ class LayerNorm(nn.LayerNorm):
         super().__init__(normalized_shape, elementwise_affine=False)
 
     def forward(self, x):
-        return x
         n, c, h, w = x.shape
         # careful here about splitting colour channels as in loss_func
         x = x.view(n, 3, c // 3, h, w).permute(0, 1, 3, 4, 2)

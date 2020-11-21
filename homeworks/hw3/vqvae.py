@@ -181,6 +181,104 @@ class PixelCNN(nn.Module):
         return samples
 
 
+class GatedLayer(nn.Module):
+    """Gated condovlution layer as in Oords Conditional PixelCNN 2016 paper."""
+
+    def __init__(self, n_features, ksize):
+        super().__init__()
+        self.vertical1 = VerticalStack(n_features, n_features*2, ksize)
+        self.verticala = VerticalStack(n_features, n_features, ksize, bias=False)
+        self.verticalb = VerticalStack(n_features, n_features, ksize, bias=False)
+        self.horizontal1 = HorizontalStack(n_features, n_features*2, ksize)
+        self.horizontala = HorizontalStack(n_features, n_features, ksize, bias=False)
+        self.horizontalb = HorizontalStack(n_features, n_features, ksize, bias=False)
+        self.conv1 = nn.Conv2d(n_features*2, n_features*2, 1)
+        self.conv2 = nn.Conv2d(n_features, n_features, 1)
+
+    def forward(self, vert, horiz):
+        # vertical
+        vert = self.vertical1(vert)
+        horiz = self.horizontal1(horiz)
+        horiz = horiz + self.conv1(vert)
+        v1, v2 = vert.chunk(2, dim=1)
+        h1, h2 = horiz.chunk(2, dim=1)
+        vert = self.verticala(v1) * self.verticalb(v2)
+        horiz = self.horizontala(h1) * self.horizontalb(h2)
+        horiz = self.conv2(horiz) + horiz
+        return vert, horiz
+
+
+class VerticalStack(nn.Conv2d):
+    """Vertical stack for PixelCNN."""
+
+    def __init__(self, in_features, out_features, ksize, bias=True):
+        padding = ksize // 2
+        super().__init__(in_features, out_features, ksize, 1, padding, bias=bias)
+        self.register_buffer("mask", torch.zeros_like(self.weight))
+        self.mask[:, :, :padding, :] = 1.
+
+    def forward(self, x):
+        out = self._conv_forward(x, self.weight * self.mask)
+        return out
+
+
+class HorizontalStack(nn.Conv2d):
+    """Horizontal stack for PixelCNN."""
+
+    def __init__(self, in_features, out_features, ksize, bias=True):
+        super().__init__(in_features, out_features, (1, ksize), 1, (0, ksize // 2), bias=bias)
+        self.register_buffer("mask", torch.zeros_like(self.weight))
+        self.mask[:, :, :, :(ksize // 2)] = 1.
+
+    def forward(self, x):
+        out = self._conv_forward(x, self.weight * self.mask)
+        return out
+
+
+class PixelCNNGated(nn.Module):
+    """Gated PixelCNN as in van Oords papers."""
+
+    def __init__(self, in_channels, n_filters, kernel_size, n_blocks, n_cats):
+        super().__init__()
+        self.n_cats = n_cats
+        self.vertical1 = VerticalStack(in_channels, n_filters, kernel_size)
+        self.horizontal1 = HorizontalStack(in_channels, n_filters, kernel_size)
+        self.gated = nn.ModuleList()
+        for _ in range(n_blocks):
+            self.gated.append(GatedLayer(n_filters, kernel_size))
+        self.vertical2 = VerticalStack(n_filters, n_filters, kernel_size)
+        self.horizontal2 = HorizontalStack(n_filters, n_filters, kernel_size)
+        self.vertical3 = VerticalStack(n_filters, n_cats, kernel_size)
+        self.horizontal3 = HorizontalStack(n_filters, n_cats, kernel_size)
+
+    def forward(self, x):
+        vert = self.vertical1(x)
+        horiz = self.horizontal1(x)
+        for layer in self.gated:
+            vert, horiz = layer(vert, horiz)
+        out = self.vertical2(vert) + self.horizontal2(horiz)
+        out = F.relu(out)
+        out = self.vertical3(out) + self.horizontal3(out)
+        return out
+
+    def sample_data(self, n_samples, image_shape, device):
+        self.eval()
+        with torch.no_grad():
+            h, w = image_shape
+            samples = torch.multinomial(torch.ones(self.n_cats)/self.n_cats,
+                                        n_samples*h*w, replacement=True)
+            samples = samples.view(n_samples, 1, h, w)
+            samples = rescale(samples, 0., self.n_cats - 1.).to(device)
+            print(f"Sampling new examples ...", flush=True)
+            for hi in range(h):
+                for wi in range(w):
+                    logits = self(samples)[:, :, hi, wi].squeeze()
+                    probs = logits.softmax(dim=1)
+                    samples[:, 0, hi, wi] = torch.multinomial(probs, 1).squeeze()
+                    samples[:, 0, hi, wi] = rescale(samples[:, 0, hi, wi], 0., self.n_cats - 1.)
+        return samples
+
+
 class VqLearner():
     """Class for model training."""
 
@@ -249,3 +347,58 @@ class VqLearner():
             cb_method = getattr(cb, cb_name, None)
             if cb_method:
                 cb_method(*args, **kwargs)
+
+
+class LearnerPixelCNN():
+    """Class for model training."""
+
+    def __init__(self, model, optimizer, trainloader, testloader, loss_func, device, clip_grads=False):
+        self.model = model
+        self.optimizer = optimizer
+        self.trainloader = trainloader
+        self.testloader = testloader
+        self.loss_func = loss_func
+        self.device = device
+        self.clip_grads = clip_grads
+
+    def fit(self, epochs):
+        losses_train = []
+        losses_test = self.eval_epoch()
+        for epoch in range(epochs):
+            print(f"Training epoch {epoch} ...", flush=True)
+            losses = self.train_epoch()
+            losses_train.extend(losses)
+            losses = self.eval_epoch()
+            losses_test.extend(losses)
+            print(f"Losses: train = {losses_train[-1]}, test = {losses_test[-1]}.", flush=True)
+        return losses_train, losses_test
+
+    def train_epoch(self):
+        losses = []
+        self.model.train()
+        for batch in self.trainloader:
+            self.optimizer.zero_grad()
+            batch = [bpart.to(self.device) for bpart in batch]
+            out = self.model(batch[0])
+            loss = self.loss_func(out, batch[-1])
+            loss.backward()
+            if self.clip_grads:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
+            self.optimizer.step()
+            losses.append(loss.item())
+        return losses
+
+    def eval_epoch(self):
+        losses = []
+        self.model.eval()
+        with torch.no_grad():
+            loss = 0.
+            n_samples = 0.
+            for batch in self.testloader:
+                batch = [bpart.to(self.device) for bpart in batch]
+                out = self.model(batch[0])
+                batch_size = batch[0].shape[0]
+                loss += self.loss_func(out, batch[-1]).item() * batch_size
+                n_samples += batch_size
+            losses.append(loss / n_samples)
+        return losses
