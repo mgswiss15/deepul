@@ -442,7 +442,8 @@ def q3(train_data, test_data, dset_id):
     testloader = DataLoader(TensorDataset(test_data, test_targets),
                             batch_size=BATCH_SIZE)
 
-    modelprior = PixelCNNGated(1, 256, 3, 8, NCODES).to(DEVICE)
+    # modelprior = PixelCNN(1, 512, 5, 10, NCODES).to(DEVICE)
+    modelprior = PixelCNNGated(1, 256, 3, 5, NCODES).to(DEVICE)
     optimizerprior = optim.Adam(modelprior.parameters(), lr=LEARN_RATE)
 
     def loss_funcprior(logits, targets):

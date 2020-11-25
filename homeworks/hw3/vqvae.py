@@ -137,7 +137,7 @@ class ResBlockPixelCNN(nn.Module):
         y = self.conv1(F.relu(x))
         y = self.conv2(F.relu(y))
         y = self.conv3(F.relu(y))
-        return x + y
+        return F.dropout(x) + y
 
 
 class PixelCNN(nn.Module):
@@ -194,17 +194,21 @@ class GatedLayer(nn.Module):
         self.horizontalb = HorizontalStack(n_features, n_features, ksize, bias=False)
         self.conv1 = nn.Conv2d(n_features*2, n_features*2, 1)
         self.conv2 = nn.Conv2d(n_features, n_features, 1)
+        self.bnormv = nn.BatchNorm2d(n_features)
+        self.bnormh = nn.BatchNorm2d(n_features)
 
-    def forward(self, vert, horiz):
+    def forward(self, vertin, horizin):
         # vertical
-        vert = self.vertical1(vert)
-        horiz = self.horizontal1(horiz)
+        vert = self.vertical1(vertin)
+        horiz = self.horizontal1(horizin)
         horiz = horiz + self.conv1(vert)
         v1, v2 = vert.chunk(2, dim=1)
         h1, h2 = horiz.chunk(2, dim=1)
         vert = self.verticala(v1) * self.verticalb(v2)
         horiz = self.horizontala(h1) * self.horizontalb(h2)
-        horiz = self.conv2(horiz) + horiz
+        horiz = self.conv2(horiz) + horizin
+        vert = self.bnormv(vert)
+        horiz = self.bnormh(horiz)
         return vert, horiz
 
 
@@ -243,20 +247,26 @@ class PixelCNNGated(nn.Module):
         self.n_cats = n_cats
         self.vertical1 = VerticalStack(in_channels, n_filters, kernel_size)
         self.horizontal1 = HorizontalStack(in_channels, n_filters, kernel_size)
+        self.bnormv1 = nn.BatchNorm2d(n_filters)
+        self.bnormh1 = nn.BatchNorm2d(n_filters)
         self.gated = nn.ModuleList()
         for _ in range(n_blocks):
             self.gated.append(GatedLayer(n_filters, kernel_size))
         self.vertical2 = VerticalStack(n_filters, n_filters, kernel_size)
         self.horizontal2 = HorizontalStack(n_filters, n_filters, kernel_size)
+        self.bnormout = nn.BatchNorm2d(n_filters)
         self.vertical3 = VerticalStack(n_filters, n_cats, kernel_size)
         self.horizontal3 = HorizontalStack(n_filters, n_cats, kernel_size)
 
     def forward(self, x):
         vert = self.vertical1(x)
         horiz = self.horizontal1(x)
+        vert = self.bnormv1(vert)
+        horiz = self.bnormh1(horiz)
         for layer in self.gated:
             vert, horiz = layer(vert, horiz)
         out = self.vertical2(vert) + self.horizontal2(horiz)
+        out = self.bnormout(out)
         out = F.relu(out)
         out = self.vertical3(out) + self.horizontal3(out)
         return out
