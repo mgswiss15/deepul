@@ -10,6 +10,8 @@ import scipy.ndimage
 import cv2
 import deepul.pytorch_util as ptu
 
+resultsdir = '../hw4/results'
+
 CLASSES = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 import numpy as np
@@ -67,11 +69,11 @@ def q1_save_results(part, fn):
     losses, samples1, xs1, ys1, samples_end, xs_end, ys_end = fn(data)
 
     # loss plot
-    plot_gan_training(losses, 'Q1{} Losses'.format(part), 'results/q1{}_losses.png'.format(part))
+    plot_gan_training(losses, f'Q1{part} Losses', f'{resultsdir}/q1{part}_losses.png')
 
     # samples
-    q1_gan_plot(data, samples1, xs1, ys1, 'Q1{} Epoch 1'.format(part), 'results/q1{}_epoch1.png'.format(part))
-    q1_gan_plot(data, samples_end, xs_end, ys_end, 'Q1{} Final'.format(part), 'results/q1{}_final.png'.format(part))
+    q1_gan_plot(data, samples1, xs1, ys1, f'Q1{part} Epoch 1', f'{resultsdir}/q1{part}_epoch1.png')
+    q1_gan_plot(data, samples_end, xs_end, ys_end, f'Q1{part} Final', f'{resultsdir}/q1{part}_final.png')
 
 ######################
 ##### Question 2 #####
@@ -117,8 +119,8 @@ def q2_save_results(fn):
     train_losses, samples = fn(train_data)
 
     print("Inception score:", calculate_is(samples.transpose([0, 3, 1, 2])))
-    plot_gan_training(train_losses, 'Q2 Losses', 'results/q2_losses.png')
-    show_samples(samples[:100] * 255.0, fname='results/q2_samples.png', title=f'CIFAR-10 generated samples')
+    plot_gan_training(train_losses, 'Q2 Losses', f'{resultsdir}/q2_losses.png')
+    show_samples(samples[:100] * 255.0, fname=f'{resultsdir}/q2_samples.png', title=f'CIFAR-10 generated samples')
 
 ######################
 ##### Question 3 #####
@@ -152,10 +154,10 @@ def q3_save_results(fn):
     train_data, test_data = load_q3_data()
     gan_losses, samples, reconstructions, pretrained_losses, random_losses = fn(train_data, test_data)
 
-    plot_gan_training(gan_losses, 'Q3 Losses', 'results/q3_gan_losses.png')
-    plot_q3_supervised(pretrained_losses, random_losses, 'Linear classification losses', 'results/q3_supervised_losses.png')
-    show_samples(samples * 255.0, fname='results/q3_samples.png', title='BiGAN generated samples')
-    show_samples(reconstructions * 255.0, nrow=20, fname='results/q3_reconstructions.png', title=f'BiGAN reconstructions')
+    plot_gan_training(gan_losses, 'Q3 Losses', f'{resultsdir}/q3_gan_losses.png')
+    plot_q3_supervised(pretrained_losses, random_losses, 'Linear classification losses', f'{resultsdir}/q3_supervised_losses.png')
+    show_samples(samples * 255.0, fname=f'{resultsdir}/q3_samples.png', title='BiGAN generated samples')
+    show_samples(reconstructions * 255.0, nrow=20, fname=f'{resultsdir}/q3_reconstructions.png', title=f'BiGAN reconstructions')
     print('BiGAN final linear classification loss:', pretrained_losses[-1])
     print('Random encoder linear classification loss:', random_losses[-1])
 
