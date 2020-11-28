@@ -1,37 +1,24 @@
 from deepul.hw4_helper import *
 import argparse
-import sys
 import homeworks.hw4.hw4_solved as hw
-from pathlib import Path
+import wandb
+
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2_a", "q2_b", "q3"],
+# exercise specs
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2"],
                     help="Code of hw to do.")
 
 parser.add_argument("--ds", type=int, choices=[1, 2],
                     help="Code of dataset to use.")
 
+# run specs
 parser.add_argument("--gpu", action="store_true",
                     help="Training on gpu.")
 
-parser.add_argument("--reload", action="store_true",
-                    help="Reload model from previously saved state.")
-
-parser.add_argument("--notrain", action="store_true",
-                    help="Do not train model.")
-
-parser.add_argument("--short", action="store_true",
-                    help="Short training of one epoch only (otherwise use the default of each exercise).")
-
-parser.add_argument("--screen", action="store_true",
-                    help="Print stdout and stderr to screen (instead of log file in results folder).")
-
 parser.add_argument("--lr", type=float, default=0.001,
                     help="Learning rate for training.")
-
-parser.add_argument("--lrmax", type=float, default=0.001,
-                    help="Max learning rate for training.")
 
 parser.add_argument("--epochs", type=int, default=15,
                     help="Max number of epochs.")
@@ -39,31 +26,47 @@ parser.add_argument("--epochs", type=int, default=15,
 parser.add_argument("--bs", type=int, default=128,
                     help="Batch size.")
 
+# arch specs
+parser.add_argument("--dsteps", type=int, default=1,
+                    help="Nubmer of discriminator steps per one generator step.")
+
+parser.add_argument("--dhidden", type=int, nargs="+", default=[10, 10],
+                    help="Hidden layers of the discriminator.")
+
+parser.add_argument("--ghidden", type=int, nargs="+", default=[10, 10],
+                    help="Hidden layers of the generator.")
+
+# wandb
+parser.add_argument("--wandboff", action="store_true",
+                    help="Switch off writing to wandb cloud.")
+parser.add_argument("--genfreq", type=int, default=50,
+                    help="Frequency for plotting generations.")
+
 args = parser.parse_args()
 
+# If you don't want your script to sync to the cloud
+if args.wandboff:
+    os.environ['WANDB_MODE'] = 'dryrun'
+
+wandb.init(project=f"deepul-hw4-{args.ex}")
+wandb.config.update(args)
+os.environ['WANDB_DIR'] = '../hw4/wandb'
+os.environ['WANDB_SHOW_RUN'] = 'true'
+
 hw.DEVICE = torch.device("cuda" if args.gpu and torch.cuda.is_available() else "cpu")
-hw.RELOAD = True if args.reload else False
-hw.TRAIN = False if args.notrain else True
 hw.LEARN_RATE = args.lr
-hw.MAXLEARN_RATE = args.lrmax
-hw.MAX_EPOCHS = 1 if args.short else args.epochs
+hw.MAX_EPOCHS = args.epochs
 hw.BATCH_SIZE = args.bs
+hw.GENFREQ = args.genfreq
+hw.DSTEPS = args.dsteps
+hw.DHIDDEN = args.dhidden
+hw.GHIDDEN = args.ghidden
 
-if not args.screen:
-    origout = sys.stdout
-    origerr = sys.stderr
-    logpath = f'{resultsdir}/{args.ex}_dset{args.ds}.log'
-    Path(logpath).parent.mkdir(parents=True, exist_ok=True)
-    logfile = open(logpath, 'w')
-    sys.stdout = sys.err = logfile
-
-print(f"Traning {args.ex}_{args.ds} with lr {args.lr} bs {args.bs} for {args.epochs} epochs.")
+print(f"Traning {args.ex}_{args.ds} with lr {hw.LEARN_RATE} bs {hw.BATCH_SIZE} for {hw.MAX_EPOCHS} epochs.")
 
 if args.ex == "q1_a":
     q1_save_results('a', hw.q1_a)
 elif args.ex == "q1_b":
     q1_save_results('b', hw.q1_b)
-
-if not args.screen:
-    sys.stdout = origout
-    sys.err = origerr
+elif args.ex == "q2":
+    q2_save_results(hw.q2)
