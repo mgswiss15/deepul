@@ -127,7 +127,7 @@ def q2(train_data):
     """
 
     traindata = torch.from_numpy(train_data).float()
-    traindata = traindata[:200, ...]
+    # traindata = traindata[:200, ...]
     trainloader = DataLoader(TensorDataset(traindata), batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
     XDIM = 3
