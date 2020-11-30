@@ -48,9 +48,9 @@ args = parser.parse_args()
 if args.wandboff:
     os.environ['WANDB_MODE'] = 'dryrun'
 
+os.environ['WANDB_DIR'] = '../hw4'
 wandb.init(project=f"deepul-hw4-{args.ex}")
 wandb.config.update(args)
-os.environ['WANDB_DIR'] = '../hw4/wandb'
 
 hw.DEVICE = torch.device("cuda" if args.gpu and torch.cuda.is_available() else "cpu")
 hw.LEARN_RATE = args.lr

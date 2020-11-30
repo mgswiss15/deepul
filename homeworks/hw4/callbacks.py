@@ -141,8 +141,8 @@ class Printing(Callback):
     """Monitoring printouts."""
 
     def epoch_begin(self):
-        print(f"Epoch {self.learner.epoch} ...", end='', flush=True)
+        print(f"Epoch {self.learner.epoch} begin. ", flush=True)
 
     def epoch_end(self):
-        print(f"finished.", flush=True)
+        print(f"Epoch {self.learner.epoch} end. ", flush=True)
 
