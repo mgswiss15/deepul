@@ -51,7 +51,6 @@ if args.wandboff:
 wandb.init(project=f"deepul-hw4-{args.ex}")
 wandb.config.update(args)
 os.environ['WANDB_DIR'] = '../hw4/wandb'
-os.environ['WANDB_SHOW_RUN'] = 'true'
 
 hw.DEVICE = torch.device("cuda" if args.gpu and torch.cuda.is_available() else "cpu")
 hw.LEARN_RATE = args.lr

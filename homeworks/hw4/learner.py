@@ -29,7 +29,7 @@ class Learner():
         for self.epoch in range(epochs):
             self.callback('epoch_begin')
             self.losses_discriminator.extend(self.discriminator_update(self.discriminator_steps))
-            self.losses_generator.append(self.generator_update())
+            self.losses_generator.append(self.generator_update())            
             self.callback('epoch_end')
         self.callback('fit_end')
         return self.losses_discriminator

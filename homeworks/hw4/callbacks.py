@@ -135,3 +135,14 @@ class Scheduler(Callback):
     def generator_step_end(self):
         wandb.log({"generator lr": self.scheduler['generator'].get_last_lr()[0]})
         self.scheduler['generator'].step()
+
+
+class Printing(Callback):
+    """Monitoring printouts."""
+
+    def epoch_begin(self):
+        print(f"Epoch {self.learner.epoch} ...", end='', flush=True)
+
+    def epoch_end(self):
+        print(f"finished.", flush=True)
+

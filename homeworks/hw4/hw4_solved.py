@@ -157,6 +157,7 @@ def q2(train_data):
     callbacks = [cb.SampleData(100, 1000, 0, GENFREQ)]
     callbacks.append(cb.Wandb(None, 1, None, GENFREQ, "q2"))
     callbacks.append(cb.Scheduler(scheduler))
+    callbacks.append(cb.Printing())
     learner = Learner(model, optimizer, trainloader, DSTEPS, DEVICE, callbacks)
     losses_train = learner.fit(MAX_EPOCHS)
 

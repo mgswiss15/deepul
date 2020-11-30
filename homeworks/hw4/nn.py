@@ -261,7 +261,7 @@ class CriticCifar(nn.Module):
     def loss_func(self, target, criticout, x, *args):
         real, fake = torch.chunk(x, 2, dim=0)
         eps = torch.rand((real.shape[0], 1, 1, 1)).to(x.device)
-        xinterpolate = eps*real + (1-eps)*fake
+        xinterpolate = eps*real + (1-eps)*fake.detach()
         forward = partial(self.forward, jacobian=True)
         grads = torch.autograd.functional.jacobian(forward, xinterpolate)
         criticreal, criticfake = torch.chunk(criticout, 2, dim=0)

@@ -13,3 +13,4 @@ deepul.egg-info/
 *.sublime*
 results
 data
+wandb
