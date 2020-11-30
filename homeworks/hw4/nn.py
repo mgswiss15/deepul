@@ -250,23 +250,20 @@ class CriticCifar(nn.Module):
                                         )
         self.linear = nn.Linear(n_filters, 1)
 
-    def forward(self, x, jacobian=False):
+    def forward(self, x):
         criticout = self.sequential(x)
         criticout = self.linear(criticout.squeeze())
-        if jacobian:
-            return criticout
-        else:
-            return criticout, x
+        return criticout, x
 
     def loss_func(self, target, criticout, x, *args):
         real, fake = torch.chunk(x, 2, dim=0)
         eps = torch.rand((real.shape[0], 1, 1, 1)).to(x.device)
         xinterpolate = eps*real + (1-eps)*fake.detach()
-        forward = partial(self.forward, jacobian=True)
-        grads = torch.autograd.functional.jacobian(forward, xinterpolate)
+        criticinterpolate, _ = self(xinterpolate)
+        grads = torch.autograd.grad(criticinterpolate.mean(), xinterpolate, create_graph=True)
+        gploss = (torch.sum(grads[0]**2, dim=(1, 2, 3))**0.5 - 1)**2
         criticreal, criticfake = torch.chunk(criticout, 2, dim=0)
         criticloss = - criticreal + criticfake
-        gploss = (torch.sum(grads**2, dim=(1, 2, 3))**0.5 - 1)**2
         return criticloss.mean() + self.lbd * gploss.mean()
 
 

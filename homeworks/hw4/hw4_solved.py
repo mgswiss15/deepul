@@ -133,7 +133,7 @@ def q2(train_data):
     XDIM = 3
     ZDIM = 128
     NFILTERS = 128
-    NSAMPLES = 1024
+    NSAMPLES = 1000
     LBD = 10
 
     print(f"Training q1_b on {DEVICE}.")
@@ -154,7 +154,7 @@ def q2(train_data):
                                                            LEARN_RATE, total_steps,
                                                            pct_start=0., anneal_strategy='linear')
 
-    callbacks = [cb.SampleData(100, 1000, 0, GENFREQ)]
+    callbacks = [cb.SampleData(100, NSAMPLES, 0, GENFREQ)]
     callbacks.append(cb.Wandb(None, 1, None, GENFREQ, "q2"))
     callbacks.append(cb.Scheduler(scheduler))
     callbacks.append(cb.Printing())
