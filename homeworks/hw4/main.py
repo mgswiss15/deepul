@@ -7,7 +7,7 @@ import wandb
 parser = argparse.ArgumentParser()
 
 # exercise specs
-parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2"],
+parser.add_argument("ex", type=str, choices=["q1_a", "q1_b", "q2", "q3"],
                     help="Code of hw to do.")
 
 parser.add_argument("--ds", type=int, choices=[1, 2],
@@ -27,6 +27,9 @@ parser.add_argument("--bs", type=int, default=128,
                     help="Batch size.")
 
 # arch specs
+parser.add_argument("--zdim", type=int, default=1,
+                    help="Dimension of random noise z.")
+
 parser.add_argument("--dsteps", type=int, default=1,
                     help="Nubmer of discriminator steps per one generator step.")
 
@@ -60,6 +63,7 @@ hw.GENFREQ = args.genfreq
 hw.DSTEPS = args.dsteps
 hw.DHIDDEN = args.dhidden
 hw.GHIDDEN = args.ghidden
+hw.ZDIM = args.zdim
 
 print(f"Traning {args.ex}_{args.ds} with lr {hw.LEARN_RATE} bs {hw.BATCH_SIZE} for {hw.MAX_EPOCHS} epochs.")
 
@@ -69,3 +73,6 @@ elif args.ex == "q1_b":
     q1_save_results('b', hw.q1_b)
 elif args.ex == "q2":
     q2_save_results(hw.q2)
+elif args.ex == "q3":
+    q3_save_results(hw.q3)
+

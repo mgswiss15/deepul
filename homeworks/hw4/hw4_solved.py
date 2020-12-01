@@ -16,6 +16,7 @@ GENFREQ = 50
 DSTEPS = 1
 DHIDDEN = [10]
 GHIDDEN = [10]
+ZDIM = 1
 
 
 def q1_a(train_data):
@@ -38,18 +39,17 @@ def q1_a(train_data):
     traindata = torch.from_numpy(train_data).float()
     trainloader = DataLoader(TensorDataset(traindata), batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-    XDIM = 1
-    ZDIM = 1
+    xdim = traindata.shape[1]
 
     print(f"Training q1_a on {DEVICE}.")
 
-    model = nn_.Gan(XDIM, ZDIM, nn_.GeneratorMlp, GHIDDEN, nn_.DiscriminatorMlp, DHIDDEN).to(DEVICE)
+    model = nn_.Gan(xdim, ZDIM, nn_.GeneratorMlp, GHIDDEN, nn_.DiscriminatorMlp, DHIDDEN).to(DEVICE)
 
     optimizer = {}
     optimizer['discriminator'] = optim.Adam(model.discriminator.parameters(), lr=LEARN_RATE)
     optimizer['generator'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE)
 
-    callbacks = [cb.SampleData(5000, 0, GENFREQ)]
+    callbacks = [cb.SampleData(5000, 5000, 0, GENFREQ)]
     fakes = torch.linspace(-1., 1., 1000)
     callbacks.append(cb.Discriminate(fakes.to(DEVICE), 0, GENFREQ))
     callbacks.append(cb.Wandb(train_data, 1, fakes.numpy(), GENFREQ, "q1_a"))
@@ -57,12 +57,12 @@ def q1_a(train_data):
     losses_train = learner.fit(MAX_EPOCHS)
 
     outputs = [np.array(losses_train).T]
-    outputs.append(learner.samples[0].to("cpu").numpy())
+    outputs.append(learner.samples_epoch.to("cpu").numpy())
     outputs.append(fakes.numpy())
-    outputs.append(learner.classes[0].to("cpu").numpy())
-    outputs.append(learner.samples['end'].to("cpu").numpy())
+    outputs.append(learner.classes_epoch.to("cpu").numpy())
+    outputs.append(learner.samples.to("cpu").numpy())
     outputs.append(fakes.numpy())
-    outputs.append(learner.classes['end'].to("cpu").numpy())
+    outputs.append(learner.classes.to("cpu").numpy())
 
     return outputs
 
@@ -87,12 +87,11 @@ def q1_b(train_data):
     traindata = torch.from_numpy(train_data).float()
     trainloader = DataLoader(TensorDataset(traindata), batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-    XDIM = 1
-    ZDIM = 1
+    xdim = traindata.shape[1]
 
     print(f"Training q1_b on {DEVICE}.")
 
-    model = nn_.Gan(XDIM, ZDIM, nn_.GeneratorMlp2, GHIDDEN, nn_.DiscriminatorMlp, DHIDDEN).to(DEVICE)
+    model = nn_.Gan(xdim, ZDIM, nn_.GeneratorMlp2, GHIDDEN, nn_.DiscriminatorMlp, DHIDDEN).to(DEVICE)
 
     optimizer = {}
     optimizer['discriminator'] = optim.Adam(model.discriminator.parameters(), lr=LEARN_RATE)
@@ -130,15 +129,14 @@ def q2(train_data):
     # traindata = traindata[:200, ...]
     trainloader = DataLoader(TensorDataset(traindata), batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-    XDIM = 3
-    ZDIM = 128
+    xdim = traindata.shape[1]
     NFILTERS = 128
     NSAMPLES = 1000
     LBD = 10
 
     print(f"Training q1_b on {DEVICE}.")
 
-    model = nn_.GanCifar(XDIM, ZDIM, NFILTERS, LBD).to(DEVICE)
+    model = nn_.GanCifar(xdim, ZDIM, NFILTERS, LBD).to(DEVICE)
 
     optimizer = {}
     optimizer['discriminator'] = optim.Adam(model.discriminator.parameters(), lr=LEARN_RATE, betas=[0, 0.9], eps=2e-4)
@@ -155,7 +153,7 @@ def q2(train_data):
                                                            pct_start=0., anneal_strategy='linear')
 
     callbacks = [cb.SampleData(100, NSAMPLES, 0, GENFREQ)]
-    callbacks.append(cb.Wandb(None, 1, None, GENFREQ, "q2"))
+    callbacks.append(cb.Wandb(None, 10, None, GENFREQ, "q2"))
     callbacks.append(cb.Scheduler(scheduler))
     callbacks.append(cb.Printing())
     learner = Learner(model, optimizer, trainloader, DSTEPS, DEVICE, callbacks)
@@ -165,3 +163,22 @@ def q2(train_data):
     outputs.append(learner.samples.permute(0, 2, 3, 1).to("cpu").numpy())
 
     return outputs
+
+
+def q3(train_data, test_data):
+    """
+    train_data: A PyTorch dataset that contains (n_train, 28, 28) MNIST digits, normalized to [-1, 1]
+                Documentation can be found at torchvision.datasets.MNIST
+    test_data: A PyTorch dataset that contains (n_test, 28, 28) MNIST digits, normalized to [-1, 1]
+                Documentation can be found at torchvision.datasets.MNIST
+
+    Returns
+    - a (# of training iterations,) numpy array of BiGAN minimax losses evaluated every minibatch
+    - a (100, 28, 28, 1) numpy array of BiGAN samples that lie in [0, 1]
+    - a (40, 28, 28, 1) numpy array of 20 real image / reconstruction pairs
+    - a (# of training epochs,) numpy array of supervised cross-entropy losses on the BiGAN encoder evaluated every epoch 
+    - a (# of training epochs,) numpy array of supervised cross-entropy losses on a random encoder evaluated every epoch 
+    """
+
+
+

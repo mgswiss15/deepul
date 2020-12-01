@@ -96,7 +96,7 @@ class Wandb(Callback):
         wandb.log({"discriminator loss": self.learner.losses_discriminator[-1],
                    "generator loss": self.learner.losses_generator[-1]})
         if self.learner.epoch % self.plot_freq == 0:
-            if self.title == "q1_b":
+            if self.title in {"q1_a", "q1_b"}:
                 fig = q1_gan_plot(self.data,
                                   self.learner.samples.numpy(),
                                   self.fakes,
@@ -109,7 +109,7 @@ class Wandb(Callback):
             plt.close(fig)
 
     def fit_end(self):
-        if self.title == "q1_b":
+        if self.title in {"q1_a", "q1_b"}:
             fig = q1_gan_plot(self.data,
                               self.learner.samples.numpy(),
                               self.fakes,

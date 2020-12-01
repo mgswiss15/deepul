@@ -29,7 +29,7 @@ class Learner():
         for self.epoch in range(epochs):
             self.callback('epoch_begin')
             self.losses_discriminator.extend(self.discriminator_update(self.discriminator_steps))
-            self.losses_generator.append(self.generator_update())            
+            self.losses_generator.append(self.generator_update())
             self.callback('epoch_end')
         self.callback('fit_end')
         return self.losses_discriminator
@@ -45,7 +45,10 @@ class Learner():
             targets = torch.zeros(batch.shape[0], 1).to(self.device)
             targets[:self.batchsize, :] = 1.
             out = self.model.discriminator(batch)
-            loss = self.discriminator_lossfunc(targets, *out)
+            if isinstance(out, torch.Tensor):
+                loss = self.discriminator_lossfunc(targets, out)
+            else:
+                loss = self.discriminator_lossfunc(targets, *out)
             losses.append(loss.item())
             loss.backward()
             self.optimizer['discriminator'].step()
@@ -60,7 +63,10 @@ class Learner():
         batch = self.model.generator.sample(self.batchsize)
         targets = torch.zeros(batch.shape[0], 1, device=self.device)
         out = self.model.discriminator(batch)
-        loss = self.generator_lossfunc(targets, *out)
+        if isinstance(out, torch.Tensor):
+            loss = self.generator_lossfunc(targets, out)
+        else:
+            loss = self.generator_lossfunc(targets, *out)
         loss.backward()
         self.optimizer['generator'].step()
         self.callback('generator_step_end')
