@@ -146,3 +146,52 @@ class Printing(Callback):
     def epoch_end(self):
         print(f"Epoch {self.learner.epoch} end. ", flush=True)
 
+
+class BiGan(Callback):
+    """Callback for wandb for BiGan."""
+
+    def __init__(self, scheduler, log_freq, nsamples, sampling_freq, recdata):
+        self.scheduler = scheduler
+        self.log_freq = log_freq
+        self.nsamples = nsamples
+        self.sampling_freq = sampling_freq
+        self.recdata = recdata
+
+    def fit_begin(self):
+        wandb.watch(self.learner.model, log="all", log_freq=self.log_freq)
+
+    def batch_begin(self):
+        wandb.log({"learning rate": self.scheduler['discriminator'].get_last_lr()[0]})
+
+    def batch_end(self):
+        self.scheduler['discriminator'].step()
+        self.scheduler['generator'].step()
+        self.scheduler['encoder'].step()
+        wandb.log({"D loss": self.learner.losses['D'][-1],
+                   "GE loss": self.learner.losses['GE'][-1]})
+
+    def epoch_end(self):
+        if (self.learner.epoch % self.sampling_freq == 0):
+            samples = self.learner.model.sample(self.nsamples).to("cpu")
+            fig = show_samples(samples, title=f"MNIST {self.learner.epoch}")
+            wandb.log({f"generations": wandb.Image(fig)})
+            plt.close(fig)
+            reconstructions = self.learner.model.reconstruct(self.recdata)
+            print(f"shapes {self.recdata.shape} {reconstructions.shape}")
+            reconstructions = torch.cat((self.recdata, reconstructions), dim=0).to("cpu")
+            fig = show_samples(reconstructions, nrow=20, title=f"MNIST {self.learner.epoch}")
+            wandb.log({f"reconstructions": wandb.Image(fig)})
+            plt.close(fig)
+
+    def fit_end(self):
+        samples = self.learner.model.sample(self.nsamples).to("cpu")
+        fig = show_samples(samples, title=f"MNIST final")
+        wandb.log({f"generations": wandb.Image(fig)})
+        plt.close(fig)
+        self.learner.final_samples = samples
+        reconstructions = self.learner.model.reconstruct(self.recdata)
+        reconstructions = torch.cat((self.recdata, reconstructions), dim=0).to("cpu")
+        fig = show_samples(reconstructions, nrow=20, title=f"MNIST {self.learner.epoch}")
+        wandb.log({f"reconstructions": wandb.Image(fig)})
+        plt.close(fig)
+        self.learner.final_reconstructons = reconstructions

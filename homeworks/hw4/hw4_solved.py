@@ -6,6 +6,7 @@ from homeworks.hw4.learner import Learner
 from torch.utils.data import DataLoader, TensorDataset
 from deepul.hw4_helper import *
 import homeworks.hw4.callbacks as cb
+import homeworks.hw4.bigan as bigan
 
 # init DEVICE, RELOAD and TRAIN will be redefined in main from argparse
 DEVICE = torch.device("cpu")
@@ -134,7 +135,7 @@ def q2(train_data):
     NSAMPLES = 1000
     LBD = 10
 
-    print(f"Training q1_b on {DEVICE}.")
+    print(f"Training q2 on {DEVICE}.")
 
     model = nn_.GanCifar(xdim, ZDIM, NFILTERS, LBD).to(DEVICE)
 
@@ -180,5 +181,47 @@ def q3(train_data, test_data):
     - a (# of training epochs,) numpy array of supervised cross-entropy losses on a random encoder evaluated every epoch 
     """
 
+    trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+    testloader = DataLoader(test_data, batch_size=BATCH_SIZE, drop_last=True)
+
+    xdim = (28, 28)
+
+    print(f"Training q3 on {DEVICE}.")
+
+    model = bigan.BiGan(xdim, ZDIM, DHIDDEN[0]).to(DEVICE)
+
+    optimizer = {}
+    optimizer['discriminator'] = optim.Adam(model.discriminator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4)
+    optimizer['generator'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4)
+    optimizer['encoder'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4)
+
+    scheduler = {}
+    total_steps = MAX_EPOCHS * len(trainloader)
+    scheduler['discriminator'] = optim.lr_scheduler.OneCycleLR(optimizer['discriminator'],
+                                                               LEARN_RATE, total_steps,
+                                                               pct_start=0., anneal_strategy='linear')
+    scheduler['generator'] = optim.lr_scheduler.OneCycleLR(optimizer['generator'],
+                                                           LEARN_RATE, total_steps,
+                                                           pct_start=0., anneal_strategy='linear')
+    scheduler['encoder'] = optim.lr_scheduler.OneCycleLR(optimizer['discriminator'],
+                                                               LEARN_RATE, total_steps,
+                                                               pct_start=0., anneal_strategy='linear')
+
+    # reconstructions
+    batch = next(iter(testloader))
+    recdata = batch[0][:20, ...].to(DEVICE)
+    callbacks = [cb.BiGan(scheduler, 10, 100, 10, recdata)]
+    learner = bigan.BiGanLearner(model, optimizer, trainloader, DEVICE, callbacks)
+    losses_train = learner.fit(MAX_EPOCHS)
+
+    outputs = [np.array(losses_train).T]
+    outputs.append(self.learner.final_samples.permute(0, 3, 1, 2).numpy())
+    outputs.append(self.learner.final_reconstructions.permute(0, 3, 1, 2).numpy())
+
+    outputs.append(torch.rand(40, 28, 28, 1).numpy())
+    outputs.append(torch.randn(100, 1).numpy())
+    outputs.append(torch.randn(100, 1).numpy())
+
+    return outputs
 
 
