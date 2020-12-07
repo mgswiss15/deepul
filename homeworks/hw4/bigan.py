@@ -169,3 +169,94 @@ class BiGanLearner():
             cb_method = getattr(cb, cb_name, None)
             if cb_method:
                 cb_method(*args, **kwargs)
+
+
+class LinearClassifier(nn.Module):
+    """Linear classifier for testing quality of representation."""
+
+    def __init__(self, zdim):
+        super().__init__()
+        self.linear = nn.Linear(zdim, 10, bias=False)
+
+    def forward(self, z):
+        logit = self.linear(z)
+        return logit
+
+    def loss_func(self, logits, targets):
+        loss = F.cross_entropy(logits, targets)
+        return loss
+
+
+class LearnerClassifier():
+    """Class for model training of a classifier."""
+
+    def __init__(self, encoder, classifier, optimizer, trainloader, testloader, loss_func, device, callback_list=[]):
+        self.encoder = encoder
+        self.classifier = classifier
+        self.optimizer = optimizer
+        self.trainloader = trainloader
+        self.testloader = testloader
+        self.loss_func = loss_func
+        self.device = device
+        self.callback_list = callback_list
+        for cb in self.callback_list:
+            cb.init_learner(self)
+        self.encoder.eval()
+        self.losses_test = []
+
+    def fit(self, epochs):
+        self.epochs = epochs
+        self.callback('fit_begin')
+        losses_train = []
+        losses = self.eval_epoch()
+        self.losses_test.extend(losses)
+        for self.epoch in range(epochs):
+            self.callback('epoch_begin')
+            print(f"Classifier training epoch {self.epoch} ...", flush=True)
+            losses = self.train_epoch()
+            losses_train.extend(losses)
+            losses = self.eval_epoch()
+            self.losses_test.extend(losses)
+            print(f"Classifier losses: train = {losses_train[-1]}, test = {self.losses_test[-1]}.", flush=True)
+            self.callback('epoch_end')
+        self.callback('fit_end')
+        return self.losses_test
+
+    def train_epoch(self):
+        self.callback('train_epoch_begin')
+        losses = []
+        self.classifier.train()
+        for batch in self.trainloader:
+            self.callback('train_batch_begin')
+            batch = [b.to(self.device) for b in batch]
+            self.optimizer.zero_grad()
+            with torch.no_grad():
+                z = self.encoder(batch[0])
+            logits = self.classifier(z)
+            loss = self.loss_func(logits, batch[1])
+            loss.backward()
+            self.optimizer.step()
+            losses.append(loss.item())
+        return losses
+
+    def eval_epoch(self):
+        losses = []
+        self.classifier.eval()
+        with torch.no_grad():
+            loss = 0.
+            n_samples = 0.
+            for batch in self.testloader:
+                batch = [b.to(self.device) for b in batch]
+                z = self.encoder(batch[0])
+                logits = self.classifier(z)
+                batch_size = batch[0].shape[0]
+                loss += self.loss_func(logits, batch[1]).item() * batch_size
+                n_samples += batch_size
+            losses.append(loss / n_samples)
+        return losses
+
+    def callback(self, cb_name, *args, **kwargs):
+        for cb in self.callback_list:
+            cb_method = getattr(cb, cb_name, None)
+            if cb_method:
+                cb_method(*args, **kwargs)

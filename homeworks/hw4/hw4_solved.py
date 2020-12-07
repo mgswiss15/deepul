@@ -182,7 +182,9 @@ def q3(train_data, test_data):
     """
 
     trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
-    testloader = DataLoader(test_data, batch_size=BATCH_SIZE, drop_last=True)
+    # for classifier training
+    trainl = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+    testl = DataLoader(test_data, batch_size=BATCH_SIZE, drop_last=True)
 
     xdim = (28, 28)
 
@@ -191,36 +193,34 @@ def q3(train_data, test_data):
     model = bigan.BiGan(xdim, ZDIM, DHIDDEN[0]).to(DEVICE)
 
     optimizer = {}
-    optimizer['discriminator'] = optim.Adam(model.discriminator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4)
-    optimizer['generator'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4)
-    optimizer['encoder'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4)
+    optimizer['discriminator'] = optim.Adam(model.discriminator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4, weight_decay=0.000025)
+    optimizer['generator'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4, weight_decay=0.000025)
+    optimizer['encoder'] = optim.Adam(model.generator.parameters(), lr=LEARN_RATE, betas=[0.5, 0.9], eps=2e-4, weight_decay=0.000025)
 
     scheduler = {}
     total_steps = MAX_EPOCHS * len(trainloader)
     scheduler['discriminator'] = optim.lr_scheduler.OneCycleLR(optimizer['discriminator'],
                                                                LEARN_RATE, total_steps,
-                                                               pct_start=0., anneal_strategy='linear')
+                                                               pct_start=0.1, final_div_factor=1e2, anneal_strategy='cos')
     scheduler['generator'] = optim.lr_scheduler.OneCycleLR(optimizer['generator'],
                                                            LEARN_RATE, total_steps,
-                                                           pct_start=0., anneal_strategy='linear')
+                                                           pct_start=0.1, final_div_factor=1e2, anneal_strategy='cos')
     scheduler['encoder'] = optim.lr_scheduler.OneCycleLR(optimizer['discriminator'],
                                                                LEARN_RATE, total_steps,
-                                                               pct_start=0., anneal_strategy='linear')
+                                                               pct_start=0.1, final_div_factor=1e2, anneal_strategy='cos')
 
     # reconstructions
-    batch = next(iter(testloader))
+    batch = next(iter(testl))
     recdata = batch[0][:20, ...].to(DEVICE)
-    callbacks = [cb.BiGan(scheduler, 10, 100, 10, recdata)]
+    callbacks = [cb.BiGan(scheduler, 10, 100, 10, recdata, ZDIM, trainl, testl, 30)]
     learner = bigan.BiGanLearner(model, optimizer, trainloader, DEVICE, callbacks)
     losses_train = learner.fit(MAX_EPOCHS)
 
     outputs = [np.array(losses_train).T]
-    outputs.append(self.learner.final_samples.permute(0, 3, 1, 2).numpy())
-    outputs.append(self.learner.final_reconstructions.permute(0, 3, 1, 2).numpy())
-
-    outputs.append(torch.rand(40, 28, 28, 1).numpy())
-    outputs.append(torch.randn(100, 1).numpy())
-    outputs.append(torch.randn(100, 1).numpy())
+    outputs.append(learner.final_samples.permute(0, 2, 3, 1).numpy())
+    outputs.append(learner.final_reconstructions.permute(0, 2, 3, 1).numpy())
+    outputs.append(learner.pretrained_losses)
+    outputs.append(learner.random_losses)
 
     return outputs
 

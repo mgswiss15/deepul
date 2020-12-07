@@ -214,7 +214,7 @@ class GeneratorCifar(nn.Module):
                                         nn.BatchNorm2d(n_filters),
                                         nn.ReLU(),
                                         nn.Conv2d(n_filters, xdim, kernel_size=(3, 3), padding=1),
-                                        nn.Tanh()
+                                        nn.Sigmoid()
                                        )
 
     def forward(self, z):

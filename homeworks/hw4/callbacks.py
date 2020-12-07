@@ -3,6 +3,10 @@ import torch
 import wandb
 from homeworks.hw4.utils import q1_gan_plot, show_samples
 import matplotlib.pyplot as plt
+import torch.optim as optim
+import homeworks.hw4.bigan as bigan
+import numpy as np
+
 
 class Callback():
     """Base class for callbacks."""
@@ -150,15 +154,20 @@ class Printing(Callback):
 class BiGan(Callback):
     """Callback for wandb for BiGan."""
 
-    def __init__(self, scheduler, log_freq, nsamples, sampling_freq, recdata):
+    def __init__(self, scheduler, log_freq, nsamples, sampling_freq, recdata, zdim, trainloader, testloader, classifierepochs=15):
         self.scheduler = scheduler
         self.log_freq = log_freq
         self.nsamples = nsamples
         self.sampling_freq = sampling_freq
         self.recdata = recdata
+        self.zdim = zdim
+        self.trainloader = trainloader
+        self.testloader = testloader
+        self.classifierepochs = classifierepochs
 
     def fit_begin(self):
         wandb.watch(self.learner.model, log="all", log_freq=self.log_freq)
+        self.learner.random_losses = self.train_classifier()
 
     def batch_begin(self):
         wandb.log({"learning rate": self.scheduler['discriminator'].get_last_lr()[0]})
@@ -172,10 +181,12 @@ class BiGan(Callback):
 
     def epoch_end(self):
         if (self.learner.epoch % self.sampling_freq == 0):
+            # samples
             samples = self.learner.model.sample(self.nsamples).to("cpu")
             fig = show_samples(samples, title=f"MNIST {self.learner.epoch}")
             wandb.log({f"generations": wandb.Image(fig)})
             plt.close(fig)
+            # reconstructions
             reconstructions = self.learner.model.reconstruct(self.recdata)
             print(f"shapes {self.recdata.shape} {reconstructions.shape}")
             reconstructions = torch.cat((self.recdata, reconstructions), dim=0).to("cpu")
@@ -184,14 +195,39 @@ class BiGan(Callback):
             plt.close(fig)
 
     def fit_end(self):
+        # samples
         samples = self.learner.model.sample(self.nsamples).to("cpu")
         fig = show_samples(samples, title=f"MNIST final")
         wandb.log({f"generations": wandb.Image(fig)})
         plt.close(fig)
         self.learner.final_samples = samples
+        # reconstructions
         reconstructions = self.learner.model.reconstruct(self.recdata)
         reconstructions = torch.cat((self.recdata, reconstructions), dim=0).to("cpu")
         fig = show_samples(reconstructions, nrow=20, title=f"MNIST {self.learner.epoch}")
         wandb.log({f"reconstructions": wandb.Image(fig)})
         plt.close(fig)
-        self.learner.final_reconstructons = reconstructions
+        self.learner.final_reconstructions = reconstructions
+        # classification
+        self.learner.pretrained_losses = self.train_classifier()
+        self.plot_class_loss(self.learner.pretrained_losses, self.learner.random_losses)
+
+    def train_classifier(self):
+        classifier = bigan.LinearClassifier(self.zdim).to(self.learner.device)
+        optimizer = optim.Adam(classifier.parameters(), lr=0.001)
+        learner = bigan.LearnerClassifier(self.learner.model.encoder, classifier, optimizer,
+                                          self.trainloader, self.testloader,
+                                          classifier.loss_func, self.learner.device)
+        losses_test = np.array(learner.fit(self.classifierepochs)).T
+        return losses_test
+
+    def plot_class_loss(self, pretrained_losses, random_losses, title="Classification losses"):
+        fig = plt.figure()
+        xs = np.arange(len(pretrained_losses))
+        plt.plot(xs, pretrained_losses, label='bigan')
+        xs = np.arange(len(random_losses))
+        plt.plot(xs, random_losses, label='random init')
+        plt.legend()
+        plt.title(title)
+        wandb.log({f"Classification losses": wandb.Image(fig)})
+        plt.close(fig)
