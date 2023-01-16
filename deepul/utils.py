@@ -99,7 +99,15 @@ def load_pickled_data(fname, include_labels=False):
 
 
 def get_data_dir(hw_number):
-    return join('deepul', 'homeworks', f'hw{hw_number}', 'data')
+    try:
+        import google.colab
+        IN_COLAB = True
+    except:
+        IN_COLAB = False
+    if IN_COLAB:
+        return join('deepul', 'homeworks', f'hw{hw_number}', 'data')
+    else:
+        return join('homeworks', f'hw{hw_number}', 'data', f'hw{hw_number}_data')
 
 
 def quantize(images, n_bits):

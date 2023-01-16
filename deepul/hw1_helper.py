@@ -1,5 +1,9 @@
 from .utils import *
 
+def testAhoj():
+    print(f'Ahoj')
+    
+
 
 # Question 1
 def q1_sample_data_1():
@@ -89,6 +93,8 @@ def visualize_q2a_data(dset_type):
     if dset_type == 1:
         n, d = 10000, 25
         true_dist, data = q2_a_sample_data(join(data_dir, 'smiley.jpg'), n, d)
+        print(f'true_dist {true_dist.shape}')
+        print(f'data {data.shape}')
     elif dset_type == 2:
         n, d = 100000, 200
         true_dist, data = q2_a_sample_data(join(data_dir, 'geoffrey-hinton.jpg'), n, d)
