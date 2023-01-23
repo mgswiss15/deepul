@@ -1,9 +1,5 @@
 from .utils import *
-
-def testAhoj():
-    print(f'Ahoj')
-    
-
+ 
 
 # Question 1
 def q1_sample_data_1():
@@ -90,6 +86,7 @@ def q2_a_sample_data(image_file, n, d):
 
 def visualize_q2a_data(dset_type):
     data_dir = get_data_dir(1)
+    print(f'data_der {data_dir}')
     if dset_type == 1:
         n, d = 10000, 25
         true_dist, data = q2_a_sample_data(join(data_dir, 'smiley.jpg'), n, d)

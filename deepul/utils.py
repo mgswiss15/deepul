@@ -107,7 +107,7 @@ def get_data_dir(hw_number):
     if IN_COLAB:
         return join('deepul', 'homeworks', f'hw{hw_number}', 'data')
     else:
-        return join('homeworks', f'hw{hw_number}', 'data', f'hw{hw_number}_data')
+        return join('data', f'hw{hw_number}_data')
 
 
 def quantize(images, n_bits):
